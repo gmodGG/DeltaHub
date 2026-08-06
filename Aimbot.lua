@@ -1,0 +1,2650 @@
+--[[
+╔═══════════════════════════════════════════════╗
+║  DELTA HUB — ABSOLUTE FINAL (ALL FIXES)       ║
+║  Aimbot Overdrive + ESP (OFF default)         ║
+║  Protection FIXED (لا يمنع الخروج)            ║
+║  Reports: PlayerGui فقط (ما يكسر القائمة)     ║
+║  AirJump Power=20 / MaxVelocity=100           ║
+║  Executor: Delta Executor Mobile              ║
+║  Status: ✅ ALL FIXES APPLIED                 ║
+╚═══════════════════════════════════════════════╝
+]]
+
+-- ═══════════════════════════════════════════
+-- STARTUP FIX
+-- ═══════════════════════════════════════════
+local function DeltaNotify(text, duration)
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Delta Hub",
+            Text = text,
+            Duration = duration or 5,
+        })
+    end)
+end
+
+pcall(function()
+    local start = tick()
+    while not game:IsLoaded() and tick() - start < 15 do
+        task.wait(0.1)
+    end
+end)
+
+-- ═══════════════════════════════════════════
+-- CONFIGURATION
+-- ═══════════════════════════════════════════
+local Config = {
+    Aimbot = {
+        Enabled = true,
+        AimPart = "Head",
+        TeamCheck = true,
+        WallCheck = true,
+        Prediction = true,
+        PredictionFactor = 0.2,
+        Smoothness = 1,
+        LockTarget = true,
+        LockSwitchKey = Enum.KeyCode.LeftShift,
+        AutoShoot = false,
+        TouchSwitch = true,
+        RetargetInterval = 0.08,
+        MaxVisibilityChecks = 5,
+        DynamicBone = true,
+        AimSpeed = 300,
+        AimStrength = 1,
+        SmoothSpeed = 80,
+        SwitchCooldown = 0.15,
+        MaxDistance = 15000,
+        FOV = 0,
+        LockFOVScale = 1.5,
+        ProjectileSpeed = 1500,
+        GravityCompensation = false,
+        ScreenWeight = 1.35,
+        DistanceWeight = 0.08,
+        HealthWeight = 55,
+        AutoShootDelay = 0.06,
+        FPSMapMode = true,
+    },
+
+    ESP = {
+        Enabled = false, -- ✅ مطفأ افتراضيًا، فعّله من القائمة
+        TeamCheck = true,
+        MaxDistance = 2500,
+        BoxEnabled = true,
+        BoxThickness = 1.4,
+        BoxGlow = true,
+        CornersEnabled = true,
+        CornerThickness = 2.2,
+        Tracers = true,
+        TracerThickness = 1.1,
+        TracerTransparency = 0.5,
+        TracerOutline = true,
+        HeadDot = true,
+        Names = true,
+        NameSize = 13,
+        Distance = true,
+        DistSize = 11,
+        HealthBar = true,
+        HealthBarWidth = 2.6,
+        HealthDynamicColor = false,
+        VisibleColor = Color3.fromRGB(94, 255, 170),
+        HiddenColor = Color3.fromRGB(255, 94, 98),
+        WallCheck = true,
+        VisPerFrame = 2,
+        MobileFPS = 30,
+        MaxDrawPlayers = 12,
+    },
+
+    Movement = {
+        AirJump = {
+            Enabled = false,
+            Jumps = 3,
+            Unlimited = false,
+            Power = 20,
+            Mode = "Add",
+            MaxVelocity = 100,
+        },
+        Speed = {
+            Enabled = false,
+            Speed = 60,
+            VelocityFallback = true,
+            VelocityStrength = 0.65,
+        },
+        HighJump = {
+            Enabled = false,
+            JumpPower = 40,
+            VelocityBoost = true,
+        },
+        NoClip = {
+            Enabled = false,
+        },
+    },
+
+    Performance = {
+        FPSCap = 60,
+        ShowFPS = false,
+        PostFXOff = false,
+        EffectsOff = false,
+        Shadows = true,
+        FogDistance = 12000,
+        Brightness = 1.5,
+        AdaptiveQuality = false,
+        LowDetail = false,
+        RemoveLights = false,
+        LowWater = false,
+        FPSCounter = {
+            Size = 16, X = 12, Y = 12,
+            Outline = true,
+            AutoColor = true,
+            Color = Color3.fromRGB(94, 255, 170),
+        },
+    },
+
+    Protection = {
+        AntiKickBan = true,
+        AntiAFK = true,
+        ExecutorCloak = true,
+        AutoDeleteReports = true,
+    },
+
+    Settings = {
+        AutoSave = true,
+        ToggleKey = Enum.KeyCode.RightShift,
+    },
+}
+
+-- ═══════════════════════════════════════════
+-- SERVICES
+-- ═══════════════════════════════════════════
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+local HttpService = game:GetService("HttpService")
+local Camera = Workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+do
+    local start = tick()
+    while not LocalPlayer and tick() - start < 20 do
+        task.wait(0.1)
+        LocalPlayer = Players.LocalPlayer
+    end
+    local camStart = tick()
+    while not Camera and tick() - camStart < 10 do
+        task.wait(0.1)
+        Camera = Workspace.CurrentCamera
+    end
+end
+
+if not LocalPlayer then
+    DeltaNotify("LocalPlayer not found ❌", 8)
+    warn("[Delta] LocalPlayer not available.")
+    return
+end
+
+DeltaNotify("Delta Hub started ✅", 2)
+
+-- ═══════════════════════════════════════════
+-- UTILITIES
+-- ═══════════════════════════════════════════
+local LastDeltaError = 0
+
+local function safeCall(fn, ...)
+    local ok, err = pcall(fn, ...)
+    if not ok then
+        warn("[Delta]", err)
+        local now = tick()
+        if now - LastDeltaError >= 3 then
+            LastDeltaError = now
+            local msg = tostring(err)
+            if #msg > 120 then msg = msg:sub(1, 120) .. "..." end
+            DeltaNotify(msg, 5)
+        end
+    end
+    return ok
+end
+
+safeCall(function() RunService:UnbindFromRenderStep("DeltaESP") end)
+safeCall(function() RunService:UnbindFromRenderStep("DeltaAimbot") end)
+safeCall(function() RunService:UnbindFromRenderStep("DeltaPerf") end)
+safeCall(function() RunService:UnbindFromRenderStep("DeltaPerfStyle") end)
+safeCall(function() RunService:UnbindFromRenderStep("DeltaMovement") end)
+
+local function ClampNumber(n, min, max)
+    if typeof(n) ~= "number" or n ~= n or n == math.huge or n == -math.huge then return min end
+    if n < min then return min end
+    if n > max then return max end
+    return n
+end
+
+local function SafeNumber(value, defaultValue)
+    if typeof(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge then
+        return value
+    end
+    return defaultValue
+end
+
+local function GetPath(path)
+    local cur = Config
+    for key in path:gmatch("[^.]+") do
+        if typeof(cur) ~= "table" then return nil end
+        cur = cur[key]
+    end
+    return cur
+end
+
+-- ═══════════════════════════════════════════
+-- CONFIG MANAGER
+-- ═══════════════════════════════════════════
+local CONFIG_FOLDER = "DeltaHub"
+local CONFIG_FILE = "DeltaHub/Config.json"
+
+local function DeepCopy(t)
+    if typeof(t) ~= "table" then return t end
+    local copy = {}
+    for k, v in pairs(t) do copy[k] = DeepCopy(v) end
+    return copy
+end
+
+local DefaultConfig = DeepCopy(Config)
+
+local function SerializeValue(v)
+    local t = typeof(v)
+    if t == "Color3" then
+        return { __type = "Color3", R = v.R, G = v.G, B = v.B }
+    elseif t == "EnumItem" then
+        local enumTypeName = tostring(v.EnumType):gsub("Enum.", "")
+        return { __type = "EnumItem", EnumType = enumTypeName, Name = v.Name }
+    elseif t == "table" then
+        local out = {}
+        for k, val in pairs(v) do out[k] = SerializeValue(val) end
+        return out
+    else
+        return v
+    end
+end
+
+local function DeserializeValue(v)
+    if typeof(v) == "table" then
+        if v.__type == "Color3" then
+            return Color3.new(v.R or 1, v.G or 1, v.B or 1)
+        elseif v.__type == "EnumItem" then
+            local ok, enum = pcall(function() return Enum[v.EnumType][v.Name] end)
+            if ok then return enum end
+            return nil
+        else
+            local out = {}
+            for k, val in pairs(v) do out[k] = DeserializeValue(val) end
+            return out
+        end
+    else
+        return v
+    end
+end
+
+local function DeepMerge(target, source)
+    for k, v in pairs(source) do
+        if typeof(v) == "table" and typeof(target[k]) == "table" then
+            DeepMerge(target[k], v)
+        else
+            if v ~= nil then target[k] = v end
+        end
+    end
+end
+
+local function SaveConfig()
+    local ok = false
+    safeCall(function()
+        if type(isfolder) == "function" and not isfolder(CONFIG_FOLDER) then
+            makefolder(CONFIG_FOLDER)
+        end
+        local data = SerializeValue(Config)
+        local json = HttpService:JSONEncode(data)
+        writefile(CONFIG_FILE, json)
+        ok = true
+    end)
+    return ok
+end
+
+local function LoadConfig()
+    local ok = false
+    safeCall(function()
+        if type(isfile) == "function" and isfile(CONFIG_FILE) then
+            local json = readfile(CONFIG_FILE)
+            local data = HttpService:JSONDecode(json)
+            local loaded = DeserializeValue(data)
+            DeepMerge(Config, loaded)
+            ok = true
+        end
+    end)
+    return ok
+end
+
+local function ResetConfig()
+    local defaults = DeepCopy(DefaultConfig)
+    for k in pairs(Config) do Config[k] = nil end
+    DeepMerge(Config, defaults)
+end
+
+LoadConfig()
+
+-- ═══════════════════════════════════════════
+-- PROTECTION ENGINE PRO (FIXED)
+-- ✅ ما يمنع زر الخروج — يمنع الريموتات المشبوهة فقط
+-- ✅ حذف البلاغات من PlayerGui فقط (ما يكسر القائمة)
+-- ═══════════════════════════════════════════
+Config.Protection = Config.Protection or {}
+Config.Protection.AntiKickBan = Config.Protection.AntiKickBan ~= false
+Config.Protection.AntiAFK = Config.Protection.AntiAFK ~= false
+Config.Protection.ExecutorCloak = Config.Protection.ExecutorCloak ~= false
+Config.Protection.AutoDeleteReports = Config.Protection.AutoDeleteReports ~= false
+
+local ProtectionEnv = nil
+if type(getgenv) == "function" then
+    pcall(function() ProtectionEnv = getgenv() end)
+end
+
+local ProtectionConnections = {}
+local ReportHookedContainers = {}
+
+if ProtectionEnv then
+    safeCall(function()
+        if ProtectionEnv.DeltaProtectionCleanup then
+            ProtectionEnv.DeltaProtectionCleanup()
+        end
+    end)
+end
+
+local function AddProtectionConnection(conn)
+    if conn then table.insert(ProtectionConnections, conn) end
+    return conn
+end
+
+local function DisconnectProtectionConnections()
+    for _, conn in ipairs(ProtectionConnections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    table.clear(ProtectionConnections)
+end
+
+if ProtectionEnv then
+    ProtectionEnv.DeltaProtectionConnections = ProtectionConnections
+    ProtectionEnv.DeltaProtectionCleanup = function()
+        safeCall(DisconnectProtectionConnections)
+    end
+end
+
+-- ✅ FIXED: بدون مسافات زائدة
+local BAD_KEYWORDS = {
+    "report", "abuse", "flag", "ticket", "complaint",
+    "moderation", "detect", "cheat", "exploit", "ban",
+    "kick", "punish", "blacklist", "anticheat", "security",
+}
+
+local function ContainsBadText(text)
+    if typeof(text) ~= "string" then return false end
+    local lower = text:lower()
+    for i = 1, #BAD_KEYWORDS do
+        if lower:find(BAD_KEYWORDS[i], 1, true) then
+            return true
+        end
+    end
+    return false
+end
+
+-- Executor Cloak
+safeCall(function()
+    if not Config.Protection.ExecutorCloak then return end
+    if type(hookfunction) ~= "function" then return end
+
+    if type(getexecutorname) == "function" then
+        local oldGetName
+        oldGetName = hookfunction(getexecutorname, function(...)
+            if Config.Protection.ExecutorCloak then return "Roblox" end
+            if type(oldGetName) == "function" then return oldGetName(...) end
+            return ""
+        end)
+    end
+
+    if type(identifyexecutor) == "function" then
+        local oldIdentify
+        oldIdentify = hookfunction(identifyexecutor, function(...)
+            if Config.Protection.ExecutorCloak then return "Roblox", {} end
+            if type(oldIdentify) == "function" then return oldIdentify(...) end
+            return "", {}
+        end)
+    end
+end)
+
+-- ✅ FIXED: يمنع الريموتات المشبوهة فقط — ما يمنع Kick/Destroy/Leave
+safeCall(function()
+    if not (Config.Protection.AntiKickBan or Config.Protection.AutoDeleteReports) then return end
+    if type(getrawmetatable) ~= "function" or type(newcclosure) ~= "function" then return end
+
+    local mt = getrawmetatable(game)
+    if not mt then return end
+    local oldNamecall = mt.__namecall
+    if not oldNamecall then return end
+
+    if type(setreadonly) == "function" then
+        pcall(function() setreadonly(mt, false) end)
+    end
+
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = ""
+        if type(getnamecallmethod) == "function" then
+            local ok, m = pcall(getnamecallmethod)
+            if ok and typeof(m) == "string" then method = m end
+        end
+
+        if Config.Protection.AntiKickBan or Config.Protection.AutoDeleteReports then
+            if typeof(self) == "Instance" and (method == "FireServer" or method == "InvokeServer") then
+                if ContainsBadText(self.Name) then
+                    return nil
+                end
+            end
+        end
+
+        return oldNamecall(self, ...)
+    end)
+
+    if type(setreadonly) == "function" then
+        pcall(function() setreadonly(mt, true) end)
+    end
+end)
+
+-- Anti-AFK
+safeCall(function()
+    if not Config.Protection.AntiAFK then return end
+    local vu = game:GetService("VirtualUser")
+    local conn = LocalPlayer.Idled:Connect(function()
+        if not Config.Protection.AntiAFK then return end
+        pcall(function() vu:CaptureController() end)
+        pcall(function() vu:ClickButton2(Vector2.new()) end)
+        pcall(function()
+            local cf = Workspace.CurrentCamera and Workspace.CurrentCamera.CFrame or CFrame.new()
+            vu:Button2Down(Vector2.new(), cf)
+            task.wait(0.1)
+            vu:Button2Up(Vector2.new(), cf)
+        end)
+    end)
+    AddProtectionConnection(conn)
+end)
+
+-- Auto Delete Reports
+local function IsReportGuiObject(obj)
+    if typeof(obj) ~= "Instance" then return false end
+    if not Config.Protection.AutoDeleteReports then return false end
+    if not ContainsBadText(obj.Name) then return false end
+    return obj:IsA("LayerCollector") or obj:IsA("GuiObject")
+end
+
+local function RemoveReportObject(obj)
+    if not IsReportGuiObject(obj) then return end
+    pcall(function()
+        if obj:IsA("LayerCollector") then obj.Enabled = false end
+        if obj:IsA("GuiObject") then obj.Visible = false end
+    end)
+    pcall(function() obj:Destroy() end)
+end
+
+local function CleanReportContainer(container)
+    if typeof(container) ~= "Instance" then return end
+    if not Config.Protection.AutoDeleteReports then return end
+    safeCall(function()
+        for _, obj in ipairs(container:GetDescendants()) do
+            RemoveReportObject(obj)
+        end
+    end)
+end
+
+-- ✅ FIXED: PlayerGui فقط — ما نمس CoreGui (عشان ما تنكسر قائمة Roblox)
+local function EnsureReportProtection()
+    if not Config.Protection.AutoDeleteReports then return end
+
+    local function HookContainer(container)
+        if typeof(container) ~= "Instance" then return end
+        CleanReportContainer(container)
+        if ReportHookedContainers[container] then return end
+        ReportHookedContainers[container] = true
+        local conn = container.DescendantAdded:Connect(function(obj)
+            if Config.Protection.AutoDeleteReports then
+                task.defer(function() RemoveReportObject(obj) end)
+            end
+        end)
+        AddProtectionConnection(conn)
+    end
+
+    safeCall(function()
+        local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+        if playerGui then
+            HookContainer(playerGui)
+        else
+            task.spawn(function()
+                local gui = LocalPlayer:WaitForChild("PlayerGui", 10)
+                if typeof(gui) == "Instance" then HookContainer(gui) end
+            end)
+        end
+    end)
+    -- ⛔ حذفنا جزء CoreGui بالكامل — هذا اللي كان يكسر القائمة وزر Leave
+end
+
+EnsureReportProtection()
+
+-- ═══════════════════════════════════════════
+-- MOVEMENT ENGINE PRO MAX
+-- ═══════════════════════════════════════════
+Config.Movement = Config.Movement or {}
+Config.Movement.AirJump = Config.Movement.AirJump or {}
+Config.Movement.Speed = Config.Movement.Speed or {}
+Config.Movement.HighJump = Config.Movement.HighJump or {}
+Config.Movement.NoClip = Config.Movement.NoClip or {}
+
+Config.Movement.AirJump.Enabled = Config.Movement.AirJump.Enabled == true
+Config.Movement.AirJump.Jumps = Config.Movement.AirJump.Jumps or 3
+if Config.Movement.AirJump.Unlimited == nil then Config.Movement.AirJump.Unlimited = false end
+Config.Movement.AirJump.Power = Config.Movement.AirJump.Power or 20
+Config.Movement.AirJump.Mode = Config.Movement.AirJump.Mode or "Add"
+Config.Movement.AirJump.MaxVelocity = Config.Movement.AirJump.MaxVelocity or 100
+
+Config.Movement.Speed.Enabled = Config.Movement.Speed.Enabled == true
+Config.Movement.Speed.Speed = Config.Movement.Speed.Speed or 60
+if Config.Movement.Speed.VelocityFallback == nil then Config.Movement.Speed.VelocityFallback = true end
+Config.Movement.Speed.VelocityStrength = Config.Movement.Speed.VelocityStrength or 0.65
+
+Config.Movement.HighJump.Enabled = Config.Movement.HighJump.Enabled == true
+Config.Movement.HighJump.JumpPower = Config.Movement.HighJump.JumpPower or 40
+if Config.Movement.HighJump.VelocityBoost == nil then Config.Movement.HighJump.VelocityBoost = true end
+
+Config.Movement.NoClip.Enabled = Config.Movement.NoClip.Enabled == true
+
+local Movement = {}
+Movement.Humanoid = nil
+Movement.Root = nil
+Movement.JumpCount = 0
+Movement.LastJumpTrigger = 0
+Movement._airStateConn = nil
+Movement._airJumpPropConn = nil
+Movement._loopConn = nil
+Movement._highJumpStateConn = nil
+Movement._noclipConn = nil
+Movement._noclipAddConn = nil
+Movement._noclipParts = {}
+
+local MovementEnv = nil
+if type(getgenv) == "function" then
+    pcall(function() MovementEnv = getgenv() end)
+end
+
+local function DisconnectMovementSignal(signal)
+    if signal then pcall(function() signal:Disconnect() end) end
+end
+
+if MovementEnv then
+    safeCall(function()
+        if MovementEnv.DeltaMovementCleanup then MovementEnv.DeltaMovementCleanup() end
+    end)
+    DisconnectMovementSignal(MovementEnv.DeltaMovementJumpRequest)
+    DisconnectMovementSignal(MovementEnv.DeltaMovementCharacterAdded)
+    DisconnectMovementSignal(MovementEnv.DeltaMovementCharacterRemoving)
+    MovementEnv.DeltaMovementJumpRequest = nil
+    MovementEnv.DeltaMovementCharacterAdded = nil
+    MovementEnv.DeltaMovementCharacterRemoving = nil
+end
+
+local MovementOriginals = MovementEnv and MovementEnv.DeltaMovementOriginals or nil
+if type(MovementOriginals) ~= "table" then
+    MovementOriginals = setmetatable({}, { __mode = "k" })
+end
+if MovementEnv then MovementEnv.DeltaMovementOriginals = MovementOriginals end
+
+Movement.Originals = MovementOriginals
+Movement.NoClipOriginals = setmetatable({}, { __mode = "k" })
+
+local function GetCharacter() return LocalPlayer.Character end
+
+local function GetHumanoid()
+    local character = GetCharacter()
+    return character and character:FindFirstChildOfClass("Humanoid") or nil
+end
+
+local function GetRoot(humanoid)
+    if typeof(humanoid) ~= "Instance" then return nil end
+    local root = humanoid.RootPart
+    if typeof(root) == "Instance" and root:IsA("BasePart") then return root end
+    local character = humanoid.Parent
+    if typeof(character) ~= "Instance" then return nil end
+    return character:FindFirstChild("HumanoidRootPart")
+        or character:FindFirstChild("UpperTorso")
+        or character:FindFirstChild("Torso")
+end
+
+local function IsGroundedState(state)
+    return state == Enum.HumanoidStateType.Landed
+        or state == Enum.HumanoidStateType.Running
+        or state == Enum.HumanoidStateType.RunningNoPhysics
+        or state == Enum.HumanoidStateType.Climbing
+        or state == Enum.HumanoidStateType.Seated
+end
+
+local function GetVelocity(root)
+    local vel = Vector3.zero
+    local ok, v = pcall(function() return root.AssemblyLinearVelocity end)
+    if not ok then ok, v = pcall(function() return root.Velocity end) end
+    if ok and typeof(v) == "Vector3" then vel = v end
+    return vel
+end
+
+local function SetRootVelocity(root, vel)
+    if typeof(root) ~= "Instance" or typeof(vel) ~= "Vector3" then return end
+    pcall(function() root.AssemblyLinearVelocity = vel end)
+    pcall(function() root.Velocity = vel end)
+end
+
+local function CaptureOriginal(humanoid)
+    if typeof(humanoid) ~= "Instance" or Movement.Originals[humanoid] then return end
+    local original = {}
+    pcall(function() original.WalkSpeed = humanoid.WalkSpeed end)
+    pcall(function() original.JumpPower = humanoid.JumpPower end)
+    pcall(function() original.JumpHeight = humanoid.JumpHeight end)
+    pcall(function() original.UseJumpPower = humanoid.UseJumpPower end)
+    Movement.Originals[humanoid] = original
+end
+
+local function ApplySpeed(humanoid)
+    if typeof(humanoid) ~= "Instance" then return end
+    CaptureOriginal(humanoid)
+    local cfg = Config.Movement.Speed
+    local original = Movement.Originals[humanoid]
+    if cfg.Enabled then
+        local speedValue = ClampNumber(SafeNumber(cfg.Speed, 60), 16, 1000)
+        pcall(function() humanoid.WalkSpeed = speedValue end)
+    else
+        local restoreValue = ClampNumber(SafeNumber(original and original.WalkSpeed, 16), 0, 1000)
+        pcall(function() humanoid.WalkSpeed = restoreValue end)
+    end
+end
+
+local function ApplyHighJump(humanoid)
+    if typeof(humanoid) ~= "Instance" then return end
+    CaptureOriginal(humanoid)
+    local cfg = Config.Movement.HighJump
+    local original = Movement.Originals[humanoid]
+    if cfg.Enabled then
+        local jumpValue = ClampNumber(SafeNumber(cfg.JumpPower, 40), 50, 2000)
+        pcall(function() humanoid.UseJumpPower = true end)
+        pcall(function() humanoid.JumpPower = jumpValue end)
+        local gravity = SafeNumber(Workspace.Gravity, 196.2)
+        if gravity > 0 then
+            pcall(function() humanoid.JumpHeight = (jumpValue * jumpValue) / (2 * gravity) end)
+        end
+    else
+        if original then
+            pcall(function() humanoid.UseJumpPower = original.UseJumpPower end)
+            pcall(function() humanoid.JumpPower = SafeNumber(original.JumpPower, 50) end)
+            pcall(function() humanoid.JumpHeight = SafeNumber(original.JumpHeight, 7.2) end)
+        else
+            pcall(function() humanoid.JumpPower = 50 end)
+            pcall(function() humanoid.JumpHeight = 7.2 end)
+        end
+    end
+end
+
+local function GetJumpVelocity(humanoid)
+    local jumpVelocity = 50
+    local usePower = true
+    pcall(function() usePower = humanoid.UseJumpPower end)
+    if usePower then
+        pcall(function()
+            local jp = humanoid.JumpPower
+            if typeof(jp) == "number" and jp == jp and jp > 0 then jumpVelocity = jp end
+        end)
+    else
+        pcall(function()
+            local jh = humanoid.JumpHeight
+            local gravity = SafeNumber(Workspace.Gravity, 196.2)
+            if typeof(jh) == "number" and jh == jh and jh > 0 and gravity > 0 then
+                jumpVelocity = math.sqrt(2 * gravity * jh)
+            end
+        end)
+    end
+    return ClampNumber(jumpVelocity, 5, 2000)
+end
+
+local function GetAirJumpVelocity(humanoid)
+    local airCfg = Config.Movement.AirJump
+    local power = SafeNumber(airCfg.Power, 0)
+    if power <= 0 then power = GetJumpVelocity(humanoid) end
+    return ClampNumber(power, 5, 2000)
+end
+
+function Movement:DisconnectAir()
+    DisconnectMovementSignal(self._airStateConn)
+    DisconnectMovementSignal(self._airJumpPropConn)
+    self._airStateConn = nil
+    self._airJumpPropConn = nil
+end
+
+function Movement:DisconnectLoop()
+    DisconnectMovementSignal(self._loopConn)
+    self._loopConn = nil
+end
+
+function Movement:DisconnectHighJumpBoost()
+    DisconnectMovementSignal(self._highJumpStateConn)
+    self._highJumpStateConn = nil
+end
+
+function Movement:StopNoClip(restore)
+    DisconnectMovementSignal(self._noclipConn)
+    DisconnectMovementSignal(self._noclipAddConn)
+    self._noclipConn = nil
+    self._noclipAddConn = nil
+    if restore then
+        for _, part in ipairs(self._noclipParts) do
+            if typeof(part) == "Instance" and part.Parent then
+                local original = self.NoClipOriginals[part]
+                if original == nil then original = true end
+                pcall(function() part.CanCollide = original end)
+            end
+        end
+    end
+    table.clear(self._noclipParts)
+end
+
+function Movement:StartNoClip()
+    self:StopNoClip(false)
+    local character = GetCharacter()
+    if typeof(character) ~= "Instance" or not Config.Movement.NoClip.Enabled then return end
+    for _, obj in ipairs(character:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            table.insert(self._noclipParts, obj)
+            if self.NoClipOriginals[obj] == nil then
+                pcall(function() self.NoClipOriginals[obj] = obj.CanCollide end)
+            end
+        end
+    end
+    safeCall(function()
+        self._noclipAddConn = character.DescendantAdded:Connect(function(obj)
+            if not Config.Movement.NoClip.Enabled then return end
+            if typeof(obj) == "Instance" and obj:IsA("BasePart") then
+                table.insert(self._noclipParts, obj)
+                if self.NoClipOriginals[obj] == nil then
+                    pcall(function() self.NoClipOriginals[obj] = obj.CanCollide end)
+                end
+            end
+        end)
+    end)
+    safeCall(function()
+        self._noclipConn = RunService.Stepped:Connect(function()
+            if not Config.Movement.NoClip.Enabled then return end
+            for _, part in ipairs(self._noclipParts) do
+                if typeof(part) == "Instance" and part.Parent and part.CanCollide then
+                    pcall(function() part.CanCollide = false end)
+                end
+            end
+        end)
+    end)
+end
+
+function Movement:UpdateNoClip()
+    if Config.Movement.NoClip.Enabled then self:StartNoClip() else self:StopNoClip(true) end
+end
+
+function Movement:TryAirJump(humanoid)
+    local cfg = Config.Movement.AirJump
+    if not cfg.Enabled then return end
+    if typeof(humanoid) ~= "Instance" or not (humanoid.Health > 0) then return end
+
+    local now = tick()
+    if now - (self.LastJumpTrigger or 0) < 0.05 then return end
+    self.LastJumpTrigger = now
+
+    local ok, state = pcall(function() return humanoid:GetState() end)
+    if not ok then return end
+    if state == Enum.HumanoidStateType.Swimming or state == Enum.HumanoidStateType.Flying then return end
+
+    if IsGroundedState(state) then
+        self.JumpCount = 1
+        return
+    end
+
+    if cfg.Unlimited ~= true then
+        local maxJumps = math.floor(ClampNumber(SafeNumber(cfg.Jumps, 3), 1, 999))
+        if self.JumpCount >= maxJumps then return end
+        self.JumpCount = self.JumpCount + 1
+    end
+
+    pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end)
+
+    local root = GetRoot(humanoid)
+    if typeof(root) ~= "Instance" then return end
+
+    local currentVelocity = GetVelocity(root)
+    local power = GetAirJumpVelocity(humanoid)
+    local maxVelocity = ClampNumber(SafeNumber(cfg.MaxVelocity, 100), 10, 5000)
+
+    local mode = tostring(cfg.Mode or "Add"):lower()
+    local newY
+    if mode == "set" then
+        newY = power
+    else
+        newY = ClampNumber(currentVelocity.Y + power, -maxVelocity, maxVelocity)
+    end
+
+    SetRootVelocity(root, Vector3.new(currentVelocity.X, newY, currentVelocity.Z))
+end
+
+function Movement:SetupAir(humanoid)
+    self:DisconnectAir()
+    self.JumpCount = 0
+    self.LastJumpTrigger = 0
+    if typeof(humanoid) ~= "Instance" or not Config.Movement.AirJump.Enabled then return end
+
+    safeCall(function()
+        self._airStateConn = humanoid.StateChanged:Connect(function(_, newState)
+            if not Config.Movement.AirJump.Enabled then return end
+            if IsGroundedState(newState) then self.JumpCount = 0 end
+        end)
+    end)
+
+    safeCall(function()
+        self._airJumpPropConn = humanoid:GetPropertyChangedSignal("Jump"):Connect(function()
+            if not Config.Movement.AirJump.Enabled then return end
+            local jumpActive = false
+            pcall(function() jumpActive = humanoid.Jump end)
+            if jumpActive then self:TryAirJump(humanoid) end
+        end)
+    end)
+end
+
+function Movement:SetupHighJumpBoost(humanoid)
+    self:DisconnectHighJumpBoost()
+    local cfg = Config.Movement.HighJump
+    if typeof(humanoid) ~= "Instance" or not cfg.Enabled or not cfg.VelocityBoost then return end
+
+    safeCall(function()
+        self._highJumpStateConn = humanoid.StateChanged:Connect(function(_, newState)
+            local currentCfg = Config.Movement.HighJump
+            if not currentCfg.Enabled or not currentCfg.VelocityBoost then return end
+            if newState ~= Enum.HumanoidStateType.Jumping then return end
+            local root = GetRoot(humanoid)
+            if typeof(root) ~= "Instance" then return end
+            local currentVelocity = GetVelocity(root)
+            local power = ClampNumber(SafeNumber(currentCfg.JumpPower, 40), 50, 2000)
+            local newY = math.max(currentVelocity.Y, power)
+            SetRootVelocity(root, Vector3.new(currentVelocity.X, newY, currentVelocity.Z))
+        end)
+    end)
+end
+
+function Movement:UpdateLoop()
+    local needLoop = Config.Movement.Speed.Enabled or Config.Movement.HighJump.Enabled
+    if not needLoop then
+        self:DisconnectLoop()
+        return
+    end
+    if self._loopConn then return end
+
+    safeCall(function()
+        self._loopConn = RunService.Heartbeat:Connect(function(dt)
+            local humanoid = self.Humanoid or GetHumanoid()
+            if typeof(humanoid) ~= "Instance" or not (humanoid.Health > 0) then return end
+
+            if Config.Movement.Speed.Enabled then
+                local cfg = Config.Movement.Speed
+                local speedValue = ClampNumber(SafeNumber(cfg.Speed, 60), 16, 1000)
+                pcall(function()
+                    if humanoid.WalkSpeed ~= speedValue then humanoid.WalkSpeed = speedValue end
+                end)
+
+                if cfg.VelocityFallback then
+                    local root = GetRoot(humanoid)
+                    if typeof(root) == "Instance" then
+                        local okState, state = pcall(function() return humanoid:GetState() end)
+                        if okState and not (
+                            state == Enum.HumanoidStateType.Seated
+                            or state == Enum.HumanoidStateType.Swimming
+                            or state == Enum.HumanoidStateType.Flying
+                        ) then
+                            local moveDirection = humanoid.MoveDirection
+                            if typeof(moveDirection) == "Vector3" and moveDirection.Magnitude > 0.01 then
+                                local currentVelocity = GetVelocity(root)
+                                local dir = moveDirection.Unit
+                                local targetX = dir.X * speedValue
+                                local targetZ = dir.Z * speedValue
+                                local strength = ClampNumber(SafeNumber(cfg.VelocityStrength, 0.65), 0, 1)
+                                local newX, newZ
+                                if strength >= 1 then
+                                    newX = targetX
+                                    newZ = targetZ
+                                else
+                                    newX = currentVelocity.X + (targetX - currentVelocity.X) * strength
+                                    newZ = currentVelocity.Z + (targetZ - currentVelocity.Z) * strength
+                                end
+                                SetRootVelocity(root, Vector3.new(newX, currentVelocity.Y, newZ))
+                            end
+                        end
+                    end
+                end
+            end
+
+            if Config.Movement.HighJump.Enabled then
+                local cfg = Config.Movement.HighJump
+                local jumpValue = ClampNumber(SafeNumber(cfg.JumpPower, 40), 50, 2000)
+                pcall(function()
+                    if humanoid.UseJumpPower ~= true then humanoid.UseJumpPower = true end
+                end)
+                pcall(function()
+                    if humanoid.JumpPower ~= jumpValue then humanoid.JumpPower = jumpValue end
+                end)
+                local gravity = SafeNumber(Workspace.Gravity, 196.2)
+                if gravity > 0 then
+                    pcall(function() humanoid.JumpHeight = (jumpValue * jumpValue) / (2 * gravity) end)
+                end
+            end
+        end)
+    end)
+end
+
+function Movement:Apply(character)
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid") or nil
+    if typeof(humanoid) ~= "Instance" then return end
+    self.Humanoid = humanoid
+    self.Root = GetRoot(humanoid)
+    CaptureOriginal(humanoid)
+    ApplySpeed(humanoid)
+    ApplyHighJump(humanoid)
+    self:SetupAir(humanoid)
+    self:SetupHighJumpBoost(humanoid)
+    self:UpdateLoop()
+    self:UpdateNoClip()
+end
+
+function Movement:Refresh()
+    local character = GetCharacter()
+    if typeof(character) == "Instance" then
+        self:Apply(character)
+    else
+        self:Cleanup()
+    end
+end
+
+function Movement:Cleanup()
+    self:DisconnectAir()
+    self:DisconnectLoop()
+    self:DisconnectHighJumpBoost()
+    self:StopNoClip(true)
+    self.Humanoid = nil
+    self.Root = nil
+    self.JumpCount = 0
+    self.LastJumpTrigger = 0
+end
+
+safeCall(function()
+    local jumpConnection = UserInputService.JumpRequest:Connect(function()
+        Movement:TryAirJump(Movement.Humanoid or GetHumanoid())
+    end)
+    if MovementEnv then MovementEnv.DeltaMovementJumpRequest = jumpConnection end
+end)
+
+safeCall(function()
+    local characterAddedConnection = LocalPlayer.CharacterAdded:Connect(function(character)
+        task.spawn(function()
+            local humanoid = character and character:WaitForChild("Humanoid", 5)
+            if typeof(humanoid) == "Instance" then
+                task.wait(0.1)
+                safeCall(function() Movement:Apply(character) end)
+            end
+        end)
+    end)
+    if MovementEnv then MovementEnv.DeltaMovementCharacterAdded = characterAddedConnection end
+end)
+
+safeCall(function()
+    local characterRemovingConnection = LocalPlayer.CharacterRemoving:Connect(function()
+        safeCall(function()
+            Movement:DisconnectAir()
+            Movement:DisconnectLoop()
+            Movement:DisconnectHighJumpBoost()
+            Movement:StopNoClip(false)
+            Movement.Humanoid = nil
+            Movement.Root = nil
+            Movement.JumpCount = 0
+            Movement.LastJumpTrigger = 0
+        end)
+    end)
+    if MovementEnv then MovementEnv.DeltaMovementCharacterRemoving = characterRemovingConnection end
+end)
+
+if LocalPlayer.Character then
+    task.spawn(function()
+        local character = LocalPlayer.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        if typeof(humanoid) ~= "Instance" and character then
+            humanoid = character:WaitForChild("Humanoid", 5)
+        end
+        if typeof(humanoid) == "Instance" then
+            safeCall(function() Movement:Apply(character) end)
+        end
+    end)
+end
+
+if MovementEnv then
+    MovementEnv.DeltaMovementCleanup = function()
+        safeCall(function() Movement:Cleanup() end)
+    end
+    MovementEnv.DeltaMovementDestroy = function()
+        safeCall(function() Movement:Cleanup() end)
+        DisconnectMovementSignal(MovementEnv.DeltaMovementJumpRequest)
+        DisconnectMovementSignal(MovementEnv.DeltaMovementCharacterAdded)
+        DisconnectMovementSignal(MovementEnv.DeltaMovementCharacterRemoving)
+        MovementEnv.DeltaMovementJumpRequest = nil
+        MovementEnv.DeltaMovementCharacterAdded = nil
+        MovementEnv.DeltaMovementCharacterRemoving = nil
+    end
+end
+
+-- ═══════════════════════════════════════════
+-- PERFORMANCE ENGINE PRO
+-- ═══════════════════════════════════════════
+local Perf = {}
+Perf.OriginalLighting = { captured = false }
+Perf.OriginalWater = { captured = false }
+Perf.OriginalCap = nil
+Perf.SavedPostFX = setmetatable({}, { __mode = "k" })
+Perf.SavedEffects = setmetatable({}, { __mode = "k" })
+Perf.SavedLights = setmetatable({}, { __mode = "k" })
+Perf.SavedVisuals = setmetatable({}, { __mode = "k" })
+Perf.EffectConn = nil
+Perf.LightConn = nil
+Perf.VisualConn = nil
+Perf.FPS = { frames = 0, last = tick(), value = 0, draw = nil, lastAdaptive = 0 }
+
+safeCall(function() RunService:UnbindFromRenderStep("DeltaPerfStyle") end)
+
+local function EnsurePerformanceConfig()
+    Config.Performance = Config.Performance or {}
+    Config.Performance.FPSCap = ClampNumber(SafeNumber(Config.Performance.FPSCap, 60), 20, 9999)
+    Config.Performance.ShowFPS = Config.Performance.ShowFPS == true
+    Config.Performance.PostFXOff = Config.Performance.PostFXOff == true
+    Config.Performance.EffectsOff = Config.Performance.EffectsOff == true
+    Config.Performance.Shadows = Config.Performance.Shadows ~= false
+    Config.Performance.FogDistance = ClampNumber(SafeNumber(Config.Performance.FogDistance, 12000), 100, 100000)
+    Config.Performance.Brightness = ClampNumber(SafeNumber(Config.Performance.Brightness, 1.5), 0, 3)
+    Config.Performance.AdaptiveQuality = Config.Performance.AdaptiveQuality == true
+    Config.Performance.LowDetail = Config.Performance.LowDetail == true
+    Config.Performance.RemoveLights = Config.Performance.RemoveLights == true
+    Config.Performance.LowWater = Config.Performance.LowWater == true
+    Config.Performance.FPSCounter = Config.Performance.FPSCounter or {}
+    Config.Performance.FPSCounter.Size = ClampNumber(SafeNumber(Config.Performance.FPSCounter.Size, 16), 10, 32)
+    Config.Performance.FPSCounter.X = ClampNumber(SafeNumber(Config.Performance.FPSCounter.X, 12), 0, 2000)
+    Config.Performance.FPSCounter.Y = ClampNumber(SafeNumber(Config.Performance.FPSCounter.Y, 12), 0, 2000)
+    Config.Performance.FPSCounter.Outline = Config.Performance.FPSCounter.Outline ~= false
+    Config.Performance.FPSCounter.AutoColor = Config.Performance.FPSCounter.AutoColor ~= false
+    if typeof(Config.Performance.FPSCounter.Color) ~= "Color3" then
+        Config.Performance.FPSCounter.Color = Color3.fromRGB(94, 255, 170)
+    end
+end
+
+local function SetFPS(n)
+    if type(setfpscap) == "function" then
+        pcall(setfpscap, math.floor(ClampNumber(SafeNumber(n, 60), 1, 9999)))
+    end
+end
+
+safeCall(function()
+    if type(getfpscap) == "function" then
+        local ok, v = pcall(getfpscap)
+        if ok and type(v) == "number" then Perf.OriginalCap = v end
+    end
+end)
+
+local function CaptureLighting()
+    if Perf.OriginalLighting.captured then return end
+    local o = Perf.OriginalLighting
+    o.captured = true
+    safeCall(function() o.GlobalShadows = Lighting.GlobalShadows end)
+    safeCall(function() o.ShadowSoftness = Lighting.ShadowSoftness end)
+    safeCall(function() o.Brightness = Lighting.Brightness end)
+    safeCall(function() o.Ambient = Lighting.Ambient end)
+    safeCall(function() o.OutdoorAmbient = Lighting.OutdoorAmbient end)
+    safeCall(function() o.FogEnd = Lighting.FogEnd end)
+    safeCall(function() o.FogStart = Lighting.FogStart end)
+    safeCall(function() o.FogColor = Lighting.FogColor end)
+    safeCall(function() o.ExposureCompensation = Lighting.ExposureCompensation end)
+    safeCall(function() o.Technology = Lighting.Technology end)
+end
+
+local function CaptureWater()
+    if Perf.OriginalWater.captured then return end
+    local terrain = Workspace:FindFirstChildOfClass("Terrain")
+    if not terrain then return end
+    local o = Perf.OriginalWater
+    o.captured = true
+    safeCall(function() o.WaterWaveSize = terrain.WaterWaveSize end)
+    safeCall(function() o.WaterWaveSpeed = terrain.WaterWaveSpeed end)
+    safeCall(function() o.WaterReflectance = terrain.WaterReflectance end)
+    safeCall(function() o.WaterTransparency = terrain.WaterTransparency end)
+end
+
+local function SetPostFX(off)
+    local classes = { "BloomEffect", "BlurEffect", "ColorCorrectionEffect", "SunRaysEffect", "DepthOfFieldEffect" }
+    if off then
+        for _, obj in ipairs(Lighting:GetDescendants()) do
+            for _, cls in ipairs(classes) do
+                if obj:IsA(cls) then
+                    local ok, enabled = pcall(function() return obj.Enabled end)
+                    Perf.SavedPostFX[obj] = ok and enabled or true
+                    pcall(function() obj.Enabled = false end)
+                end
+            end
+        end
+    else
+        for obj, en in pairs(Perf.SavedPostFX) do pcall(function() obj.Enabled = en end) end
+        table.clear(Perf.SavedPostFX)
+    end
+end
+
+local EFFECT_CLASSES = { "ParticleEmitter", "Beam", "Trail", "Fire", "Smoke", "Sparkles" }
+
+local function KillEffect(obj)
+    for _, cls in ipairs(EFFECT_CLASSES) do
+        if obj:IsA(cls) then
+            local ok, enabled = pcall(function() return obj.Enabled end)
+            Perf.SavedEffects[obj] = ok and enabled or true
+            pcall(function() obj.Enabled = false end)
+        end
+    end
+end
+
+local function SetEffects(off)
+    if off then
+        task.spawn(function()
+            for _, obj in ipairs(Workspace:GetDescendants()) do pcall(KillEffect, obj) end
+        end)
+        if not Perf.EffectConn then
+            Perf.EffectConn = Workspace.DescendantAdded:Connect(function(obj) pcall(KillEffect, obj) end)
+        end
+    else
+        if Perf.EffectConn then
+            pcall(function() Perf.EffectConn:Disconnect() end)
+            Perf.EffectConn = nil
+        end
+        for obj, en in pairs(Perf.SavedEffects) do pcall(function() obj.Enabled = en end) end
+        table.clear(Perf.SavedEffects)
+    end
+end
+
+local LIGHT_CLASSES = { "PointLight", "SpotLight", "SurfaceLight" }
+
+local function KillLight(obj)
+    for _, cls in ipairs(LIGHT_CLASSES) do
+        if obj:IsA(cls) then
+            local ok, enabled = pcall(function() return obj.Enabled end)
+            Perf.SavedLights[obj] = ok and enabled or true
+            pcall(function() obj.Enabled = false end)
+        end
+    end
+end
+
+local function SetLights(off)
+    if off then
+        task.spawn(function()
+            for _, obj in ipairs(Workspace:GetDescendants()) do pcall(KillLight, obj) end
+        end)
+        if not Perf.LightConn then
+            Perf.LightConn = Workspace.DescendantAdded:Connect(function(obj) pcall(KillLight, obj) end)
+        end
+    else
+        if Perf.LightConn then
+            pcall(function() Perf.LightConn:Disconnect() end)
+            Perf.LightConn = nil
+        end
+        for obj, en in pairs(Perf.SavedLights) do pcall(function() obj.Enabled = en end) end
+        table.clear(Perf.SavedLights)
+    end
+end
+
+local function HideVisual(obj)
+    if typeof(obj) ~= "Instance" then return end
+    if obj:IsA("Texture") or obj:IsA("Decal") then
+        if Perf.SavedVisuals[obj] == nil then
+            local data = {}
+            pcall(function() data.Enabled = obj.Enabled end)
+            pcall(function() data.Transparency = obj.Transparency end)
+            Perf.SavedVisuals[obj] = data
+        end
+        pcall(function()
+            if obj:IsA("Decal") then obj.Enabled = false end
+        end)
+        pcall(function() obj.Transparency = 1 end)
+    end
+end
+
+local function RestoreVisual(obj, data)
+    if typeof(obj) ~= "Instance" or not obj.Parent or typeof(data) ~= "table" then return end
+    if data.Enabled ~= nil then pcall(function() obj.Enabled = data.Enabled end) end
+    if data.Transparency ~= nil then pcall(function() obj.Transparency = data.Transparency end) end
+end
+
+local function SetLowDetail(off)
+    if off then
+        task.spawn(function()
+            for _, obj in ipairs(Workspace:GetDescendants()) do pcall(HideVisual, obj) end
+        end)
+        if not Perf.VisualConn then
+            Perf.VisualConn = Workspace.DescendantAdded:Connect(function(obj) pcall(HideVisual, obj) end)
+        end
+    else
+        if Perf.VisualConn then
+            pcall(function() Perf.VisualConn:Disconnect() end)
+            Perf.VisualConn = nil
+        end
+        for obj, data in pairs(Perf.SavedVisuals) do pcall(RestoreVisual, obj, data) end
+        table.clear(Perf.SavedVisuals)
+    end
+end
+
+local function SetLowWater(off)
+    local terrain = Workspace:FindFirstChildOfClass("Terrain")
+    if not terrain then return end
+    CaptureWater()
+    if off then
+        pcall(function() terrain.WaterWaveSize = 0 end)
+        pcall(function() terrain.WaterWaveSpeed = 0 end)
+        pcall(function() terrain.WaterReflectance = 0 end)
+        pcall(function() terrain.WaterTransparency = 0 end)
+    else
+        local o = Perf.OriginalWater
+        if o.captured then
+            pcall(function() terrain.WaterWaveSize = o.WaterWaveSize or 0 end)
+            pcall(function() terrain.WaterWaveSpeed = o.WaterWaveSpeed or 0 end)
+            pcall(function() terrain.WaterReflectance = o.WaterReflectance or 0 end)
+            pcall(function() terrain.WaterTransparency = o.WaterTransparency or 0 end)
+        end
+    end
+end
+
+local function SetShadows(on)
+    CaptureLighting()
+    Config.Performance.Shadows = on
+    pcall(function() Lighting.GlobalShadows = on end)
+end
+
+local function SetFog(dist)
+    CaptureLighting()
+    Config.Performance.FogDistance = dist
+    pcall(function()
+        Lighting.FogEnd = dist
+        Lighting.FogStart = 0
+    end)
+end
+
+local function SetBright(v)
+    CaptureLighting()
+    Config.Performance.Brightness = v
+    pcall(function() Lighting.Brightness = v end)
+end
+
+-- ✅ FIXED: مفاتيح بدون مسافات زائدة
+local PRESETS = {
+    ["Ultra"] = {
+        GlobalShadows = true, ShadowSoftness = 1, Brightness = 2, FogEnd = 100000,
+        Tech = "ShadowMap", PostFXOff = false, EffectsOff = false,
+        RemoveLights = false, LowDetail = false, LowWater = false,
+    },
+    ["High"] = {
+        GlobalShadows = true, ShadowSoftness = 0.5, Brightness = 2, FogEnd = 40000,
+        Tech = "ShadowMap", PostFXOff = false, EffectsOff = false,
+        RemoveLights = false, LowDetail = false, LowWater = false,
+    },
+    ["Medium"] = {
+        GlobalShadows = false, ShadowSoftness = 0, Brightness = 1.5, FogEnd = 12000,
+        Tech = "ShadowMap", PostFXOff = true, EffectsOff = true,
+        RemoveLights = false, LowDetail = false, LowWater = false,
+    },
+    ["Low"] = {
+        GlobalShadows = false, ShadowSoftness = 0, Brightness = 1, FogEnd = 3000,
+        Tech = "Voxel", PostFXOff = true, EffectsOff = true,
+        RemoveLights = true, LowDetail = true, LowWater = true,
+    },
+    ["Potato"] = {
+        GlobalShadows = false, ShadowSoftness = 0, Brightness = 1, FogEnd = 800,
+        Tech = "Legacy", PostFXOff = true, EffectsOff = true,
+        RemoveLights = true, LowDetail = true, LowWater = true,
+    },
+}
+
+local function ApplyQuality(name)
+    CaptureLighting()
+    CaptureWater()
+    local p = PRESETS[name]
+    if not p then return end
+    pcall(function() Lighting.GlobalShadows = p.GlobalShadows end)
+    pcall(function() Lighting.ShadowSoftness = p.ShadowSoftness end)
+    pcall(function() Lighting.Brightness = p.Brightness end)
+    pcall(function() Lighting.FogEnd = p.FogEnd end)
+    pcall(function() Lighting.FogStart = 0 end)
+    Config.Performance.Shadows = p.GlobalShadows
+    Config.Performance.FogDistance = p.FogEnd
+    Config.Performance.Brightness = p.Brightness
+    if p.Tech then
+        local tech = Enum.Technology[p.Tech]
+        if tech then pcall(function() Lighting.Technology = tech end) end
+    end
+    SetPostFX(p.PostFXOff)
+    Config.Performance.PostFXOff = p.PostFXOff
+    SetEffects(p.EffectsOff)
+    Config.Performance.EffectsOff = p.EffectsOff
+    SetLights(p.RemoveLights)
+    Config.Performance.RemoveLights = p.RemoveLights
+    SetLowDetail(p.LowDetail)
+    Config.Performance.LowDetail = p.LowDetail
+    SetLowWater(p.LowWater)
+    Config.Performance.LowWater = p.LowWater
+end
+
+local function RestoreAll()
+    local o = Perf.OriginalLighting
+    if o.captured then
+        pcall(function() Lighting.GlobalShadows = o.GlobalShadows end)
+        pcall(function() Lighting.ShadowSoftness = o.ShadowSoftness end)
+        pcall(function() Lighting.Brightness = o.Brightness end)
+        pcall(function() Lighting.Ambient = o.Ambient end)
+        pcall(function() Lighting.OutdoorAmbient = o.OutdoorAmbient end)
+        pcall(function() Lighting.FogEnd = o.FogEnd end)
+        pcall(function() Lighting.FogStart = o.FogStart end)
+        pcall(function() Lighting.FogColor = o.FogColor end)
+        pcall(function() Lighting.ExposureCompensation = o.ExposureCompensation end)
+        if o.Technology then pcall(function() Lighting.Technology = o.Technology end) end
+        Config.Performance.Shadows = o.GlobalShadows
+        Config.Performance.FogDistance = o.FogEnd
+        Config.Performance.Brightness = o.Brightness
+    end
+    SetPostFX(false)
+    SetEffects(false)
+    SetLights(false)
+    SetLowDetail(false)
+    SetLowWater(false)
+    if Perf.OriginalCap then SetFPS(Perf.OriginalCap) else SetFPS(9999) end
+    Config.Performance.PostFXOff = false
+    Config.Performance.EffectsOff = false
+    Config.Performance.RemoveLights = false
+    Config.Performance.LowDetail = false
+    Config.Performance.LowWater = false
+    Config.Performance.AdaptiveQuality = false
+end
+
+local function UpdateFPSDraw()
+    if typeof(Perf.FPS.draw) ~= "table" then return end
+    local c = Config.Performance.FPSCounter
+    pcall(function()
+        Perf.FPS.draw.Size = c.Size
+        Perf.FPS.draw.Position = Vector2.new(c.X, c.Y)
+        Perf.FPS.draw.Outline = c.Outline
+        Perf.FPS.draw.Visible = Config.Performance.ShowFPS
+    end)
+end
+
+local function ApplyPerformanceSettings()
+    EnsurePerformanceConfig()
+    CaptureLighting()
+    CaptureWater()
+    SetFPS(Config.Performance.FPSCap)
+    SetPostFX(Config.Performance.PostFXOff)
+    SetEffects(Config.Performance.EffectsOff)
+    SetLights(Config.Performance.RemoveLights)
+    SetLowDetail(Config.Performance.LowDetail)
+    SetLowWater(Config.Performance.LowWater)
+    pcall(function() Lighting.GlobalShadows = Config.Performance.Shadows end)
+    pcall(function()
+        Lighting.FogEnd = Config.Performance.FogDistance
+        Lighting.FogStart = 0
+    end)
+    pcall(function() Lighting.Brightness = Config.Performance.Brightness end)
+    UpdateFPSDraw()
+end
+
+safeCall(function()
+    Perf.FPS.draw = Drawing.new("Text")
+    Perf.FPS.draw.Text = "FPS: 0"
+    Perf.FPS.draw.Center = false
+    Perf.FPS.draw.Outline = true
+    Perf.FPS.draw.OutlineColor = Color3.fromRGB(0, 0, 0)
+    Perf.FPS.draw.Color = Color3.fromRGB(94, 255, 170)
+    Perf.FPS.draw.Font = Drawing.Fonts.Plex
+    Perf.FPS.draw.Position = Vector2.new(12, 12)
+    Perf.FPS.draw.Size = 16
+    Perf.FPS.draw.Visible = false
+end)
+
+EnsurePerformanceConfig()
+CaptureLighting()
+CaptureWater()
+ApplyPerformanceSettings()
+
+safeCall(function()
+    local styleAccum = 0
+    RunService:BindToRenderStep("DeltaPerfStyle", 200, function(dt)
+        styleAccum = styleAccum + (dt or 0)
+        if styleAccum < 0.25 then return end
+        styleAccum = 0
+        UpdateFPSDraw()
+        if Perf.FPS.draw and Config.Performance.ShowFPS then
+            local c = Config.Performance.FPSCounter
+            pcall(function()
+                Perf.FPS.draw.Text = "FPS: " .. tostring(Perf.FPS.value)
+                if c.AutoColor then
+                    if Perf.FPS.value >= 50 then
+                        Perf.FPS.draw.Color = Color3.fromRGB(94, 255, 170)
+                    elseif Perf.FPS.value >= 30 then
+                        Perf.FPS.draw.Color = Color3.fromRGB(255, 210, 90)
+                    else
+                        Perf.FPS.draw.Color = Color3.fromRGB(255, 94, 98)
+                    end
+                else
+                    Perf.FPS.draw.Color = c.Color
+                end
+            end)
+        end
+        if Config.Performance.AdaptiveQuality then
+            local now = tick()
+            if now - Perf.FPS.lastAdaptive >= 1.5 then
+                Perf.FPS.lastAdaptive = now
+                local fps = Perf.FPS.value
+                if fps > 0 then
+                    if fps < 28 then ApplyQuality("Potato")
+                    elseif fps < 42 then ApplyQuality("Low")
+                    elseif fps < 52 then ApplyQuality("Medium") end
+                end
+            end
+        end
+    end)
+end)
+
+function Perf.Destroy()
+    safeCall(function() RunService:UnbindFromRenderStep("DeltaPerfStyle") end)
+    safeCall(function()
+        if Perf.FPS.draw then Perf.FPS.draw:Remove() end
+    end)
+end
+
+-- ═══════════════════════════════════════════
+-- ESP ENGINE
+-- ═══════════════════════════════════════════
+local ESP = {}
+ESP.Objects = {}
+ESP.Candidates = {}
+ESP.VisCache = {}
+ESP.VisIndex = 0
+ESP.LastUpdate = 0
+
+local ESPRayParams = RaycastParams.new()
+ESPRayParams.FilterType = Enum.RaycastFilterType.Exclude
+ESPRayParams.IgnoreWater = true
+local ESPRayIgnore = {}
+
+function ESP:IsPartVisible(part)
+    if not Camera or typeof(part) ~= "Instance" or not part:IsA("BasePart") or not part.Parent then return false end
+    local origin = Camera.CFrame.Position
+    local target = part.Position
+    local dir = target - origin
+    local dist = dir.Magnitude
+    if typeof(dist) ~= "number" or dist ~= dist or dist == math.huge then return false end
+    if dist < 0.05 then return true end
+    if dist > Config.ESP.MaxDistance then return false end
+    table.clear(ESPRayIgnore)
+    if LocalPlayer.Character then ESPRayIgnore[1] = LocalPlayer.Character end
+    ESPRayParams.FilterDescendantsInstances = ESPRayIgnore
+    local ok, result = pcall(function() return Workspace:Raycast(origin, dir.Unit * dist, ESPRayParams) end)
+    if not ok then return true end
+    if not result then return true end
+    return result.Instance:IsDescendantOf(part.Parent)
+end
+
+function ESP:ForceCheckVisible(plr, head, root)
+    local visible = self:IsPartVisible(head) or self:IsPartVisible(root)
+    self.VisCache[plr] = visible
+end
+
+function ESP:Create(player)
+    local OC = Color3.fromRGB(10, 10, 14)
+    local d = {
+        Glow = Drawing.new("Square"),
+        BoxOutline = Drawing.new("Square"),
+        Box = Drawing.new("Square"),
+        TracerOutline = Drawing.new("Line"),
+        Tracer = Drawing.new("Line"),
+        HP_Outline = Drawing.new("Square"),
+        HP_BG = Drawing.new("Square"),
+        HP = Drawing.new("Square"),
+        Corners = {},
+        HeadDot = Drawing.new("Circle"),
+        Name = Drawing.new("Text"),
+        Dist = Drawing.new("Text"),
+    }
+    d.Glow.Filled = false; d.Glow.Thickness = 5; d.Glow.Transparency = 0.2; d.Glow.Visible = false
+    d.BoxOutline.Filled = false; d.BoxOutline.Thickness = 3.4; d.BoxOutline.Color = OC; d.BoxOutline.Visible = false
+    d.Box.Filled = false; d.Box.Thickness = Config.ESP.BoxThickness; d.Box.Visible = false
+    d.TracerOutline.Thickness = Config.ESP.TracerThickness + 1.4; d.TracerOutline.Color = OC; d.TracerOutline.Transparency = 0.5; d.TracerOutline.Visible = false
+    d.Tracer.Thickness = Config.ESP.TracerThickness; d.Tracer.Transparency = Config.ESP.TracerTransparency; d.Tracer.Visible = false
+    d.HP_Outline.Filled = true; d.HP_Outline.Color = OC; d.HP_Outline.Visible = false
+    d.HP_BG.Filled = true; d.HP_BG.Color = Color3.fromRGB(18, 18, 24); d.HP_BG.Visible = false
+    d.HP.Filled = true; d.HP.Visible = false
+    for i = 1, 8 do
+        d.Corners[i] = Drawing.new("Line")
+        d.Corners[i].Thickness = Config.ESP.CornerThickness
+        d.Corners[i].Visible = false
+    end
+    d.HeadDot.Filled = false; d.HeadDot.Thickness = 1.6; d.HeadDot.NumSides = 20; d.HeadDot.Visible = false
+    d.Name.Size = Config.ESP.NameSize; d.Name.Center = true; d.Name.Outline = true
+    d.Name.OutlineColor = OC; d.Name.Color = Color3.fromRGB(255, 255, 255)
+    d.Name.Font = Drawing.Fonts.Plex; d.Name.Visible = false
+    d.Dist.Size = Config.ESP.DistSize; d.Dist.Center = true; d.Dist.Outline = true
+    d.Dist.OutlineColor = OC; d.Dist.Color = Color3.fromRGB(185, 190, 205)
+    d.Dist.Font = Drawing.Fonts.Plex; d.Dist.Visible = false
+    ESP.Objects[player] = d
+end
+
+function ESP:RefreshStyles()
+    for _, d in pairs(ESP.Objects) do
+        d.Box.Thickness = Config.ESP.BoxThickness
+        d.Tracer.Thickness = Config.ESP.TracerThickness
+        d.Tracer.Transparency = Config.ESP.TracerTransparency
+        d.TracerOutline.Thickness = Config.ESP.TracerThickness + 1.4
+        d.Name.Size = Config.ESP.NameSize
+        d.Dist.Size = Config.ESP.DistSize
+        for i = 1, 8 do d.Corners[i].Thickness = Config.ESP.CornerThickness end
+    end
+end
+
+function ESP:Hide(plr)
+    local d = ESP.Objects[plr]
+    if not d then return end
+    d.Glow.Visible = false; d.BoxOutline.Visible = false; d.Box.Visible = false
+    d.TracerOutline.Visible = false; d.Tracer.Visible = false
+    d.HP_Outline.Visible = false; d.HP_BG.Visible = false; d.HP.Visible = false
+    for i = 1, 8 do d.Corners[i].Visible = false end
+    d.HeadDot.Visible = false; d.Name.Visible = false; d.Dist.Visible = false
+end
+
+function ESP:HideAll()
+    for plr in pairs(ESP.Objects) do self:Hide(plr) end
+end
+
+function ESP:DrawPlayer(c, cam, centerX, bottomY, viewport)
+    local plr, root, head, hum, dist = c.Player, c.Root, c.Head, c.Humanoid, c.Dist
+    local rootScreen, onScreen = cam:WorldToViewportPoint(root.Position)
+    if not onScreen then self:Hide(plr); return end
+    if not ESP.Objects[plr] then self:Create(plr) end
+    local d = ESP.Objects[plr]
+    if not d then return end
+
+    local visible
+    if Config.ESP.WallCheck then
+        local v = ESP.VisCache[plr]
+        visible = (v == nil) and true or v
+    else
+        visible = true
+    end
+
+    local color = visible and Config.ESP.VisibleColor or Config.ESP.HiddenColor
+    local hpRatio = 1
+    if hum.MaxHealth > 0 then hpRatio = ClampNumber(hum.Health / hum.MaxHealth, 0, 1) end
+    local hpColor = color
+    if Config.ESP.HealthDynamicColor then
+        hpColor = Color3.fromRGB(255 * (1 - hpRatio), 210 * hpRatio + 45, 70)
+    end
+
+    local topScreen = cam:WorldToViewportPoint(head.Position + Vector3.new(0, 1.1, 0))
+    local bottomScreen = cam:WorldToViewportPoint(root.Position - Vector3.new(0, 3.1, 0))
+    local yTop = math.min(topScreen.Y, bottomScreen.Y)
+    local yBottom = math.max(topScreen.Y, bottomScreen.Y)
+    local boxH = ClampNumber(yBottom - yTop, 14, viewport.Y)
+    local boxW = boxH * 0.5
+    local boxX = rootScreen.X - boxW * 0.5
+    local boxY = yTop
+
+    if Config.ESP.BoxGlow then
+        d.Glow.Visible = true; d.Glow.Color = color
+        d.Glow.Position = Vector2.new(boxX - 2.5, boxY - 2.5)
+        d.Glow.Size = Vector2.new(boxW + 5, boxH + 5)
+    else d.Glow.Visible = false end
+
+    if Config.ESP.BoxEnabled then
+        d.BoxOutline.Visible = true
+        d.BoxOutline.Position = Vector2.new(boxX, boxY)
+        d.BoxOutline.Size = Vector2.new(boxW, boxH)
+        d.Box.Visible = true; d.Box.Color = color
+        d.Box.Position = Vector2.new(boxX, boxY)
+        d.Box.Size = Vector2.new(boxW, boxH)
+    else d.BoxOutline.Visible = false; d.Box.Visible = false end
+
+    if Config.ESP.CornersEnabled then
+        local cs = ClampNumber(boxH * 0.14, 4, 14)
+        d.Corners[1].From = Vector2.new(boxX, boxY + cs); d.Corners[1].To = Vector2.new(boxX, boxY)
+        d.Corners[2].From = Vector2.new(boxX, boxY); d.Corners[2].To = Vector2.new(boxX + cs, boxY)
+        d.Corners[3].From = Vector2.new(boxX + boxW - cs, boxY); d.Corners[3].To = Vector2.new(boxX + boxW, boxY)
+        d.Corners[4].From = Vector2.new(boxX + boxW, boxY); d.Corners[4].To = Vector2.new(boxX + boxW, boxY + cs)
+        d.Corners[5].From = Vector2.new(boxX, boxY + boxH - cs); d.Corners[5].To = Vector2.new(boxX, boxY + boxH)
+        d.Corners[6].From = Vector2.new(boxX, boxY + boxH); d.Corners[6].To = Vector2.new(boxX + cs, boxY + boxH)
+        d.Corners[7].From = Vector2.new(boxX + boxW - cs, boxY + boxH); d.Corners[7].To = Vector2.new(boxX + boxW, boxY + boxH)
+        d.Corners[8].From = Vector2.new(boxX + boxW, boxY + boxH - cs); d.Corners[8].To = Vector2.new(boxX + boxW, boxY + boxH)
+        for i = 1, 8 do d.Corners[i].Visible = true; d.Corners[i].Color = color end
+    else
+        for i = 1, 8 do d.Corners[i].Visible = false end
+    end
+
+    if Config.ESP.Tracers then
+        local from = Vector2.new(centerX, bottomY)
+        local to = Vector2.new(rootScreen.X, yBottom + 2)
+        if Config.ESP.TracerOutline then
+            d.TracerOutline.Visible = true
+            d.TracerOutline.From = from; d.TracerOutline.To = to
+        else d.TracerOutline.Visible = false end
+        d.Tracer.Visible = true; d.Tracer.From = from; d.Tracer.To = to; d.Tracer.Color = color
+    else d.TracerOutline.Visible = false; d.Tracer.Visible = false end
+
+    if Config.ESP.HeadDot then
+        local headScreen = cam:WorldToViewportPoint(head.Position)
+        d.HeadDot.Visible = true
+        d.HeadDot.Position = Vector2.new(headScreen.X, headScreen.Y)
+        d.HeadDot.Radius = ClampNumber(boxW * 0.17, 2.5, 8)
+        d.HeadDot.Color = color
+    else d.HeadDot.Visible = false end
+
+    if Config.ESP.HealthBar then
+        local barW = Config.ESP.HealthBarWidth
+        local barX = boxX - barW - 5
+        d.HP_Outline.Visible = true
+        d.HP_Outline.Position = Vector2.new(barX - 1, boxY - 1)
+        d.HP_Outline.Size = Vector2.new(barW + 2, boxH + 2)
+        d.HP_BG.Visible = true
+        d.HP_BG.Position = Vector2.new(barX, boxY)
+        d.HP_BG.Size = Vector2.new(barW, boxH)
+        d.HP.Visible = true
+        d.HP.Position = Vector2.new(barX, boxY + boxH * (1 - hpRatio))
+        d.HP.Size = Vector2.new(barW, math.max(boxH * hpRatio, hpRatio > 0 and 1 or 0))
+        d.HP.Color = hpColor
+    else d.HP_Outline.Visible = false; d.HP_BG.Visible = false; d.HP.Visible = false end
+
+    if Config.ESP.Names then
+        d.Name.Visible = true
+        d.Name.Text = plr.DisplayName or plr.Name
+        d.Name.Position = Vector2.new(rootScreen.X, boxY - 16)
+    else d.Name.Visible = false end
+
+    if Config.ESP.Distance then
+        d.Dist.Visible = true
+        d.Dist.Text = string.format("%.0f m", dist)
+        d.Dist.Position = Vector2.new(rootScreen.X, yBottom + 5)
+    else d.Dist.Visible = false end
+end
+
+function ESP:Update()
+    local now = tick()
+    local interval = 1 / ClampNumber(Config.ESP.MobileFPS, 10, 120)
+    if now - ESP.LastUpdate < interval then return end
+    ESP.LastUpdate = now
+    if not Config.ESP.Enabled then self:HideAll(); return end
+
+    Camera = Workspace.CurrentCamera or Camera
+    local cam = Camera
+    if not cam then return end
+    local viewport = cam.ViewportSize
+    if viewport.X <= 0 or viewport.Y <= 0 then return end
+
+    local centerX = viewport.X * 0.5
+    local bottomY = viewport.Y
+    local camPos = cam.CFrame.Position
+    local maxDist = Config.ESP.MaxDistance
+    local cap = Config.ESP.MaxDrawPlayers
+    local candidates = ESP.Candidates
+    table.clear(candidates)
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            local char = plr.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            local head = char and char:FindFirstChild("Head")
+            local hum = char and char:FindFirstChild("Humanoid")
+            if root and head and hum then
+                local dist = (camPos - root.Position).Magnitude
+                if typeof(dist) == "number" and dist == dist and dist ~= math.huge and dist <= maxDist then
+                    candidates[#candidates + 1] = { Player = plr, Root = root, Head = head, Humanoid = hum, Dist = dist }
+                else
+                    if ESP.Objects[plr] then ESP:Hide(plr) end
+                end
+            else
+                if ESP.Objects[plr] then ESP:Hide(plr) end
+            end
+        end
+    end
+
+    if #candidates > 1 then
+        table.sort(candidates, function(a, b) return a.Dist < b.Dist end)
+    end
+
+    if Config.ESP.WallCheck then
+        local n = math.min(cap, #candidates)
+        if n > 0 then
+            local vpf = ClampNumber(Config.ESP.VisPerFrame, 1, 6)
+            for _ = 1, vpf do
+                ESP.VisIndex = (ESP.VisIndex % n) + 1
+                local c = candidates[ESP.VisIndex]
+                self:ForceCheckVisible(c.Player, c.Head, c.Root)
+            end
+        end
+    end
+
+    for i = 1, #candidates do
+        local c = candidates[i]
+        if i > cap then
+            if ESP.Objects[c.Player] then ESP:Hide(c.Player) end
+        else
+            self:DrawPlayer(c, cam, centerX, bottomY, viewport)
+        end
+    end
+end
+
+function ESP:Remove(plr)
+    local d = ESP.Objects[plr]
+    if not d then return end
+    local function RemoveDraw(obj)
+        if obj then pcall(function() obj:Remove() end) end
+    end
+    RemoveDraw(d.Glow); RemoveDraw(d.BoxOutline); RemoveDraw(d.Box)
+    RemoveDraw(d.TracerOutline); RemoveDraw(d.Tracer)
+    RemoveDraw(d.HP_Outline); RemoveDraw(d.HP_BG); RemoveDraw(d.HP)
+    for i = 1, 8 do RemoveDraw(d.Corners[i]) end
+    RemoveDraw(d.HeadDot); RemoveDraw(d.Name); RemoveDraw(d.Dist)
+    ESP.Objects[plr] = nil
+    ESP.VisCache[plr] = nil
+end
+
+Players.PlayerRemoving:Connect(function(plr)
+    safeCall(function() ESP:Remove(plr) end)
+end)
+
+LocalPlayer.CharacterAdded:Connect(function()
+    safeCall(function()
+        local list = {}
+        for plr in pairs(ESP.Objects) do table.insert(list, plr) end
+        for _, plr in ipairs(list) do ESP:Remove(plr) end
+        table.clear(ESP.VisCache)
+    end)
+end)
+
+-- ═══════════════════════════════════════════
+-- AIMBOT ENGINE — OVERDRIVE
+-- ═══════════════════════════════════════════
+local Aimbot = {
+    Locked = nil, LastSwitch = 0, LastShot = 0, LastRetarget = 0,
+    LockVisTime = 0, LockVisResult = true, LockVisPart = nil,
+}
+
+local AimbotConnections = {}
+pcall(function()
+    local old = getgenv().DeltaAimbotConnections
+    if old then
+        for _, c in ipairs(old) do pcall(function() c:Disconnect() end) end
+    end
+    getgenv().DeltaAimbotConnections = AimbotConnections
+end)
+
+local function ConnectAimbot(signal, fn)
+    local c = signal:Connect(fn)
+    table.insert(AimbotConnections, c)
+    return c
+end
+
+local function AimSafe(fn, ...)
+    local ok, err = pcall(fn, ...)
+    if not ok then warn("[Delta Aimbot]", err) end
+    return ok, err
+end
+
+local function IsFiniteNumber(n)
+    return typeof(n) == "number" and n == n and n ~= math.huge and n ~= -math.huge
+end
+
+local function AimClamp(n, min, max)
+    if not IsFiniteNumber(n) then return min end
+    if n < min then return min end
+    if n > max then return max end
+    return n
+end
+
+local function IsFiniteVector(v)
+    return typeof(v) == "Vector3" and IsFiniteNumber(v.X) and IsFiniteNumber(v.Y) and IsFiniteNumber(v.Z)
+end
+
+local function IsPlayerAlive(plr)
+    local char = plr and plr.Character
+    if not char then return false end
+    local root = char:FindFirstChild("HumanoidRootPart")
+        or char:FindFirstChild("Torso")
+        or char:FindFirstChild("UpperTorso")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    return root ~= nil and hum ~= nil and hum.Health > 0
+end
+
+local function IsEnemy(plr)
+    local C = Config.Aimbot
+    if not C.TeamCheck then return true end
+    local meTeam = LocalPlayer.Team
+    local plrTeam = plr.Team
+    if meTeam == nil or plrTeam == nil then return true end
+    return meTeam ~= plrTeam
+end
+
+local function GetPartByName(char, name)
+    if not char or not name then return nil end
+    local p = char:FindFirstChild(name)
+    if p and p:IsA("BasePart") then return p end
+    return nil
+end
+
+local RayParams = RaycastParams.new()
+RayParams.FilterType = Enum.RaycastFilterType.Exclude
+RayParams.IgnoreWater = true
+
+local lastCamera = Camera
+local lastCharacter = LocalPlayer.Character
+
+local function RefreshRayIgnore()
+    local ignore = {}
+    if LocalPlayer.Character then table.insert(ignore, LocalPlayer.Character) end
+    if lastCamera then table.insert(ignore, lastCamera) end
+    RayParams.FilterDescendantsInstances = ignore
+end
+
+RefreshRayIgnore()
+
+local function MaybeRefreshRayIgnore()
+    local cam = Workspace.CurrentCamera or Camera
+    local char = LocalPlayer.Character
+    if cam ~= lastCamera or char ~= lastCharacter then
+        Camera = cam
+        lastCamera = cam
+        lastCharacter = char
+        RefreshRayIgnore()
+    end
+end
+
+local function IsPartVisible(part)
+    if typeof(part) ~= "Instance" or not part:IsA("BasePart") or not part.Parent then return false end
+    MaybeRefreshRayIgnore()
+    if not Camera then return false end
+    local origin = Camera.CFrame.Position
+    local targetPos = part.Position
+    if not IsFiniteVector(origin) or not IsFiniteVector(targetPos) then return false end
+    local dir = targetPos - origin
+    local dist = dir.Magnitude
+    if not IsFiniteNumber(dist) then return false end
+    if dist < 0.05 then return true end
+    local maxAimDistance = ClampNumber(Config.Aimbot.MaxDistance or 15000, 100, 30000)
+    if dist > maxAimDistance then return false end
+    local ok, result = pcall(function() return Workspace:Raycast(origin, dir.Unit * (dist + 0.1), RayParams) end)
+    if not ok then return true end
+    if not result then return true end
+    return result.Instance:IsDescendantOf(part.Parent)
+end
+
+local function GetBestAimPart(plr)
+    local C = Config.Aimbot
+    local char = plr and plr.Character
+    if not char or not Camera then return nil end
+    local wallCheck = C.WallCheck ~= false
+    local dynamicBone = C.DynamicBone == nil or C.DynamicBone
+    local preferred = { C.AimPart, "Head", "HumanoidRootPart" }
+    if not dynamicBone then
+        for _, name in ipairs(preferred) do
+            local part = GetPartByName(char, name)
+            if part and (not wallCheck or IsPartVisible(part)) then return part end
+        end
+        return nil
+    end
+    local bestPart, bestScore = nil, math.huge
+    local camPos = Camera.CFrame.Position
+    local checked = {}
+    local function Consider(name, weight)
+        if not name or checked[name] then return end
+        checked[name] = true
+        local part = GetPartByName(char, name)
+        if part and IsFiniteVector(part.Position) and (not wallCheck or IsPartVisible(part)) then
+            local score = (part.Position - camPos).Magnitude * weight
+            if IsFiniteNumber(score) and score < bestScore then
+                bestScore = score
+                bestPart = part
+            end
+        end
+    end
+    Consider(C.AimPart, 0.50)
+    Consider("Head", 0.58)
+    Consider("UpperTorso", 0.66)
+    Consider("HumanoidRootPart", 0.74)
+    Consider("LowerTorso", 0.82)
+    return bestPart
+end
+
+local function GetTargetScore(plr, part)
+    local C = Config.Aimbot
+    if typeof(part) ~= "Instance" or not part.Parent or not Camera then return nil end
+    local partPos = part.Position
+    if not IsFiniteVector(partPos) then return nil end
+    local viewport = Camera.ViewportSize
+    if viewport.X <= 0 or viewport.Y <= 0 then return nil end
+    local screenPos, onScreen = Camera:WorldToViewportPoint(partPos)
+    if not onScreen then return nil end
+    local center = Vector2.new(viewport.X * 0.5, viewport.Y * 0.5)
+    local screenDist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+    if not IsFiniteNumber(screenDist) then return nil end
+    local fov = C.FOV or 0
+    if fov > 0 and screenDist > fov then return nil end
+    local worldDist = (partPos - Camera.CFrame.Position).Magnitude
+    local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+    local hpRatio = 1
+    if hum and hum.MaxHealth > 0 then hpRatio = AimClamp(hum.Health / hum.MaxHealth, 0, 1) end
+    local score = screenDist * (C.ScreenWeight or 1.35)
+    score = score + worldDist * (C.DistanceWeight or 0.08)
+    score = score - (1 - hpRatio) * (C.HealthWeight or 55)
+    if not IsFiniteNumber(score) then return nil end
+    return score, screenDist
+end
+
+function Aimbot:GetTarget()
+    local C = Config.Aimbot
+    if not Camera then return nil end
+    local candidates = {}
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and IsEnemy(plr) and IsPlayerAlive(plr) then
+            local char = plr.Character
+            local part = GetPartByName(char, C.AimPart)
+                or GetPartByName(char, "Head")
+                or GetPartByName(char, "HumanoidRootPart")
+            if part then
+                local score = GetTargetScore(plr, part)
+                if score then table.insert(candidates, { Player = plr, Score = score }) end
+            end
+        end
+    end
+    if #candidates == 0 then return nil end
+    table.sort(candidates, function(a, b) return a.Score < b.Score end)
+    local maxChecks = math.max(1, C.MaxVisibilityChecks or 5)
+    for i = 1, math.min(maxChecks, #candidates) do
+        local cand = candidates[i]
+        local part = GetBestAimPart(cand.Player)
+        if part then
+            local score = GetTargetScore(cand.Player, part)
+            if score then return { Player = cand.Player, Part = part, Score = score } end
+        end
+    end
+    return nil
+end
+
+function Aimbot:IsLockedValid()
+    local C = Config.Aimbot
+    local t = self.Locked
+    if not t or not t.Player or not t.Part then return false end
+    if t.Player == LocalPlayer then return false end
+    if not IsEnemy(t.Player) then return false end
+    if not IsPlayerAlive(t.Player) then return false end
+    if typeof(t.Part) ~= "Instance" or not t.Part.Parent then
+        local newPart = GetBestAimPart(t.Player)
+        if not newPart then return false end
+        t.Part = newPart
+        self.LockVisPart = newPart
+        self.LockVisResult = true
+        self.LockVisTime = tick()
+    end
+    if C.WallCheck ~= false then
+        local now = tick()
+        if self.LockVisPart ~= t.Part or now - self.LockVisTime > 0.15 then
+            self.LockVisTime = now
+            self.LockVisPart = t.Part
+            local vis = IsPartVisible(t.Part)
+            if not vis then
+                local alt = GetBestAimPart(t.Player)
+                if alt then t.Part = alt; self.LockVisPart = alt; vis = true end
+            end
+            self.LockVisResult = vis
+        end
+        if not self.LockVisResult then return false end
+    end
+    local fov = C.FOV or 0
+    if fov > 0 then
+        local _, screenDist = GetTargetScore(t.Player, t.Part)
+        if not screenDist then return false end
+        local lockFov = fov * (C.LockFOVScale or 1.5)
+        if screenDist > lockFov then return false end
+    end
+    return true
+end
+
+function Aimbot:ForceSwitch()
+    self.Locked = nil
+    self.LastSwitch = tick()
+end
+
+local function TrySwitchLock()
+    local C = Config.Aimbot
+    if C.LockSwitchKey then
+        local overdrive = AimClamp((C.AimSpeed or 100) / 100, 1, 3)
+        local ok, down = pcall(function() return UserInputService:IsKeyDown(C.LockSwitchKey) end)
+        if ok and down and tick() - Aimbot.LastSwitch > ((C.SwitchCooldown or 0.15) / overdrive) then
+            Aimbot:ForceSwitch()
+        end
+    end
+end
+
+local function PredictPosition(part, basePos)
+    local C = Config.Aimbot
+    if not C.Prediction then return basePos end
+    if typeof(part) ~= "Instance" or not part:IsA("BasePart") or not Camera then return basePos end
+    if not IsFiniteVector(basePos) then return basePos end
+    local vel = part.AssemblyLinearVelocity or part.Velocity or Vector3.zero
+    if not IsFiniteVector(vel) then vel = Vector3.zero end
+    local origin = Camera.CFrame.Position
+    local dist = (basePos - origin).Magnitude
+    if not IsFiniteNumber(dist) then return basePos end
+    local speed = C.ProjectileSpeed or 1500
+    local travelTime
+    if speed > 0 then travelTime = dist / speed else travelTime = dist / 1500 end
+    local overdrive = AimClamp((C.AimSpeed or 100) / 100, 1, 3)
+    travelTime = travelTime * (C.PredictionFactor or 0.2) * (0.85 + overdrive * 0.2)
+    if not IsFiniteNumber(travelTime) then travelTime = 0 end
+    travelTime = AimClamp(travelTime, 0, 0.5)
+    local predicted = basePos + vel * travelTime
+    if C.GravityCompensation and speed > 0 then
+        local g = Workspace.Gravity or 196.2
+        predicted = predicted + Vector3.new(0, 0.5 * g * travelTime * travelTime, 0)
+    end
+    if not IsFiniteVector(predicted) then return basePos end
+    return predicted
+end
+
+local function AimAtPosition(targetPos, dt)
+    local C = Config.Aimbot
+    if not Camera or not IsFiniteVector(targetPos) then return end
+    local origin = Camera.CFrame.Position
+    if not IsFiniteVector(origin) then return end
+    if (targetPos - origin).Magnitude < 0.01 then return end
+    local goal = CFrame.new(origin, targetPos)
+    local aimSpeed = AimClamp(C.AimSpeed or 100, 1, 300)
+    local aimStrength = AimClamp(C.AimStrength or C.Smoothness or 1, 0, 1)
+    if aimSpeed >= 100 and aimStrength >= 1 then
+        Camera.CFrame = goal
+        return
+    end
+    local frameDt = AimClamp(typeof(dt) == "number" and dt or 0, 0, 0.1)
+    local alpha = 1 - math.exp(-aimSpeed * frameDt)
+    alpha = math.min(alpha * aimStrength, 1)
+    Camera.CFrame = Camera.CFrame:Lerp(goal, alpha)
+end
+
+local function TryAutoShoot()
+    local C = Config.Aimbot
+    if not C.AutoShoot then return end
+    local delay = C.AutoShootDelay or 0.06
+    if tick() - Aimbot.LastShot < delay then return end
+    Aimbot.LastShot = tick()
+    task.spawn(function()
+        AimSafe(function()
+            local vim = game:GetService("VirtualInputManager")
+            vim:SendMouseButtonEvent(0, 0, 0, true, nil, 0)
+            task.wait(0.02)
+            vim:SendMouseButtonEvent(0, 0, 0, false, nil, 0)
+        end)
+    end)
+end
+
+function Aimbot:Update(dt)
+    local C = Config.Aimbot
+    MaybeRefreshRayIgnore()
+    if not C.Enabled then self.Locked = nil; return end
+    if not IsPlayerAlive(LocalPlayer) then self.Locked = nil; return end
+    TrySwitchLock()
+    local now = tick()
+    if C.LockTarget and self.Locked then
+        if not self:IsLockedValid() then self.Locked = nil end
+    end
+    if not self.Locked then
+        local overdrive = AimClamp((C.AimSpeed or 100) / 100, 1, 3)
+        local retargetInterval = (C.RetargetInterval or 0.08) / overdrive
+        if now - self.LastRetarget >= retargetInterval then
+            self.LastRetarget = now
+            self.Locked = self:GetTarget()
+        end
+    end
+    local target = self.Locked
+    if not target then return end
+    local part = target.Part
+    if typeof(part) ~= "Instance" or not part.Parent then self.Locked = nil; return end
+    local aimPos = PredictPosition(part, part.Position)
+    AimAtPosition(aimPos, dt)
+    TryAutoShoot()
+end
+
+if UserInputService.TouchEnabled and Config.Aimbot.TouchSwitch ~= false then
+    pcall(function()
+        ConnectAimbot(UserInputService.TouchTap, function(touchPositions, processedByUI)
+            if processedByUI then return end
+            if touchPositions and #touchPositions >= 2 then Aimbot:ForceSwitch() end
+        end)
+    end)
+end
+
+-- ═══════════════════════════════════════════
+-- RUNTIME
+-- ═══════════════════════════════════════════
+safeCall(function()
+    RunService:BindToRenderStep("DeltaESP", 200, function() safeCall(ESP.Update, ESP) end)
+end)
+
+safeCall(function()
+    RunService:BindToRenderStep("DeltaAimbot", Enum.RenderPriority.Camera.Value + 1, function()
+        safeCall(Aimbot.Update, Aimbot)
+    end)
+end)
+
+safeCall(function()
+    RunService:BindToRenderStep("DeltaPerf", 100, function()
+        Perf.FPS.frames = Perf.FPS.frames + 1
+        local now = tick()
+        if now - Perf.FPS.last >= 0.5 then
+            Perf.FPS.value = math.floor(Perf.FPS.frames / (now - Perf.FPS.last))
+            Perf.FPS.frames = 0
+            Perf.FPS.last = now
+        end
+    end)
+end)
+
+print("[Delta] ABSOLUTE FINAL (ALL FIXES) loaded.")
+
+-- ═══════════════════════════════════════════
+-- MENU
+-- ═══════════════════════════════════════════
+safeCall(function()
+    local WindUISource
+    safeCall(function()
+        WindUISource = game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua")
+    end)
+    if not WindUISource and type(request) == "function" then
+        safeCall(function()
+            local res = request({
+                Url = "https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua",
+                Method = "GET",
+            })
+            if res and res.Body then WindUISource = res.Body end
+        end)
+    end
+    if not WindUISource then error("WindUI download failed") end
+
+    local WindUI = loadstring(WindUISource)()
+    local Window = WindUI:CreateWindow({
+        Title = "Delta Hub",
+        Author = "ABSOLUTE FINAL (ALL FIXES)",
+        Icon = "crosshair",
+        Theme = "Dark",
+    })
+    pcall(function() Window:SetToggleKey(Config.Settings.ToggleKey) end)
+
+    local UIControls = {}
+    local function Reg(path, ctrl)
+        if ctrl then UIControls[#UIControls + 1] = { path = path, ctrl = ctrl } end
+        return ctrl
+    end
+    local function RefreshUI()
+        for _, item in ipairs(UIControls) do
+            pcall(function()
+                local val = GetPath(item.path)
+                if val ~= nil and item.ctrl and item.ctrl.SetValue then
+                    item.ctrl:SetValue(val)
+                end
+            end)
+        end
+    end
+    local function GetKeyCode(name)
+        local ok, key = pcall(function() return Enum.KeyCode[name] end)
+        return ok and key or nil
+    end
+
+    -- Aimbot
+    local AimTab = Window:Tab({ Title = "Aimbot", Icon = "crosshair" })
+    local AimMain = AimTab:Section({ Title = "Main", Box = true, BoxBorder = true, Opened = true })
+    Reg("Aimbot.Enabled", AimMain:Toggle({ Title = "Enable Aimbot", Value = Config.Aimbot.Enabled, Callback = function(v) Config.Aimbot.Enabled = v end }))
+    Reg("Aimbot.AimPart", AimMain:Dropdown({ Title = "Aim Part", Values = { "Head", "HumanoidRootPart", "UpperTorso", "Torso" }, Value = Config.Aimbot.AimPart, Callback = function(v) Config.Aimbot.AimPart = v end }))
+    Reg("Aimbot.TeamCheck", AimMain:Toggle({ Title = "Team Check", Value = Config.Aimbot.TeamCheck, Callback = function(v) Config.Aimbot.TeamCheck = v end }))
+    Reg("Aimbot.WallCheck", AimMain:Toggle({ Title = "Wall Check", Value = Config.Aimbot.WallCheck, Callback = function(v) Config.Aimbot.WallCheck = v end }))
+    Reg("Aimbot.DynamicBone", AimMain:Toggle({ Title = "Dynamic Bone", Value = Config.Aimbot.DynamicBone, Callback = function(v) Config.Aimbot.DynamicBone = v end }))
+
+    local AimPerf = AimTab:Section({ Title = "Aimbot Performance", Box = true, BoxBorder = true, Opened = true })
+    Reg("Aimbot.AimSpeed", AimPerf:Slider({ Title = "Aim Speed", Step = 1, Value = { Min = 1, Max = 300, Default = Config.Aimbot.AimSpeed }, Callback = function(v) Config.Aimbot.AimSpeed = v end }))
+    Reg("Aimbot.AimStrength", AimPerf:Slider({ Title = "Aim Strength", Step = 0.05, Value = { Min = 0.05, Max = 1, Default = Config.Aimbot.AimStrength }, Callback = function(v) Config.Aimbot.AimStrength = v end }))
+    Reg("Aimbot.RetargetInterval", AimPerf:Slider({ Title = "Target Refresh (s)", Step = 0.01, Value = { Min = 0.03, Max = 0.4, Default = Config.Aimbot.RetargetInterval }, Callback = function(v) Config.Aimbot.RetargetInterval = v end }))
+    Reg("Aimbot.SwitchCooldown", AimPerf:Slider({ Title = "Switch Cooldown", Step = 0.05, Value = { Min = 0.05, Max = 1.5, Default = Config.Aimbot.SwitchCooldown }, Callback = function(v) Config.Aimbot.SwitchCooldown = v end }))
+    Reg("Aimbot.MaxVisibilityChecks", AimPerf:Slider({ Title = "Max Visibility Checks", Step = 1, Value = { Min = 1, Max = 8, Default = Config.Aimbot.MaxVisibilityChecks }, Callback = function(v) Config.Aimbot.MaxVisibilityChecks = v end }))
+    Reg("Aimbot.MaxDistance", AimPerf:Slider({ Title = "Max Distance", Step = 100, Value = { Min = 100, Max = 30000, Default = Config.Aimbot.MaxDistance }, Callback = function(v) Config.Aimbot.MaxDistance = v end }))
+    Reg("Aimbot.LockTarget", AimPerf:Toggle({ Title = "Lock Target", Value = Config.Aimbot.LockTarget, Callback = function(v) Config.Aimbot.LockTarget = v end }))
+    AimPerf:Keybind({
+        Title = "Switch Lock Key",
+        Value = "LeftShift",
+        Callback = function(keyName)
+            local key = GetKeyCode(keyName)
+            if key and keyName ~= "MouseLeft" and keyName ~= "MouseRight" then
+                Config.Aimbot.LockSwitchKey = key
+            end
+        end
+    })
+
+    local AimPred = AimTab:Section({ Title = "Prediction", Box = true, BoxBorder = true, Opened = false })
+    Reg("Aimbot.Prediction", AimPred:Toggle({ Title = "Prediction", Value = Config.Aimbot.Prediction, Callback = function(v) Config.Aimbot.Prediction = v end }))
+    Reg("Aimbot.PredictionFactor", AimPred:Slider({ Title = "Prediction Factor", Step = 0.05, Value = { Min = 0, Max = 1, Default = Config.Aimbot.PredictionFactor }, Callback = function(v) Config.Aimbot.PredictionFactor = v end }))
+    Reg("Aimbot.ProjectileSpeed", AimPred:Slider({ Title = "Projectile Speed", Step = 50, Value = { Min = 0, Max = 5000, Default = Config.Aimbot.ProjectileSpeed }, Callback = function(v) Config.Aimbot.ProjectileSpeed = v end }))
+    Reg("Aimbot.GravityCompensation", AimPred:Toggle({ Title = "Gravity Compensation", Value = Config.Aimbot.GravityCompensation, Callback = function(v) Config.Aimbot.GravityCompensation = v end }))
+
+    local AimBeh = AimTab:Section({ Title = "Behavior", Box = true, BoxBorder = true, Opened = false })
+    Reg("Aimbot.AutoShoot", AimBeh:Toggle({ Title = "Auto Shoot", Value = Config.Aimbot.AutoShoot, Callback = function(v) Config.Aimbot.AutoShoot = v end }))
+    Reg("Aimbot.AutoShootDelay", AimBeh:Slider({ Title = "Auto Shoot Delay", Step = 0.01, Value = { Min = 0.02, Max = 0.5, Default = Config.Aimbot.AutoShootDelay }, Callback = function(v) Config.Aimbot.AutoShootDelay = v end }))
+    Reg("Aimbot.TouchSwitch", AimBeh:Toggle({ Title = "Touch Switch (2 fingers)", Value = Config.Aimbot.TouchSwitch, Callback = function(v) Config.Aimbot.TouchSwitch = v end }))
+    Reg("Aimbot.FOV", AimBeh:Slider({ Title = "FOV (0 = Off)", Step = 10, Value = { Min = 0, Max = 2000, Default = Config.Aimbot.FOV }, Callback = function(v) Config.Aimbot.FOV = v end }))
+    Reg("Aimbot.LockFOVScale", AimBeh:Slider({ Title = "Lock FOV Scale", Step = 0.05, Value = { Min = 1, Max = 3, Default = Config.Aimbot.LockFOVScale }, Callback = function(v) Config.Aimbot.LockFOVScale = v end }))
+    Reg("Aimbot.ScreenWeight", AimBeh:Slider({ Title = "Screen Weight", Step = 0.1, Value = { Min = 0, Max = 5, Default = Config.Aimbot.ScreenWeight }, Callback = function(v) Config.Aimbot.ScreenWeight = v end }))
+    Reg("Aimbot.DistanceWeight", AimBeh:Slider({ Title = "Distance Weight", Step = 0.01, Value = { Min = 0, Max = 1, Default = Config.Aimbot.DistanceWeight }, Callback = function(v) Config.Aimbot.DistanceWeight = v end }))
+    Reg("Aimbot.HealthWeight", AimBeh:Slider({ Title = "Health Weight", Step = 1, Value = { Min = 0, Max = 150, Default = Config.Aimbot.HealthWeight }, Callback = function(v) Config.Aimbot.HealthWeight = v end }))
+
+    -- ESP
+    local ESPTab = Window:Tab({ Title = "ESP", Icon = "eye" })
+    local ESPMain = ESPTab:Section({ Title = "Main", Box = true, BoxBorder = true, Opened = true })
+    Reg("ESP.Enabled", ESPMain:Toggle({ Title = "Enable ESP", Value = Config.ESP.Enabled, Callback = function(v) Config.ESP.Enabled = v end }))
+    Reg("ESP.TeamCheck", ESPMain:Toggle({ Title = "Team Check", Value = Config.ESP.TeamCheck, Callback = function(v) Config.ESP.TeamCheck = v end }))
+    Reg("ESP.WallCheck", ESPMain:Toggle({ Title = "Wall Check Colors", Value = Config.ESP.WallCheck, Callback = function(v) Config.ESP.WallCheck = v end }))
+
+    local ESPVis = ESPTab:Section({ Title = "Visuals", Box = true, BoxBorder = true, Opened = true })
+    Reg("ESP.BoxEnabled", ESPVis:Toggle({ Title = "Box", Value = Config.ESP.BoxEnabled, Callback = function(v) Config.ESP.BoxEnabled = v end }))
+    Reg("ESP.BoxGlow", ESPVis:Toggle({ Title = "Box Glow", Value = Config.ESP.BoxGlow, Callback = function(v) Config.ESP.BoxGlow = v end }))
+    Reg("ESP.CornersEnabled", ESPVis:Toggle({ Title = "Corners", Value = Config.ESP.CornersEnabled, Callback = function(v) Config.ESP.CornersEnabled = v end }))
+    Reg("ESP.Tracers", ESPVis:Toggle({ Title = "Tracers", Value = Config.ESP.Tracers, Callback = function(v) Config.ESP.Tracers = v end }))
+    Reg("ESP.TracerOutline", ESPVis:Toggle({ Title = "Tracer Outline", Value = Config.ESP.TracerOutline, Callback = function(v) Config.ESP.TracerOutline = v end }))
+    Reg("ESP.HeadDot", ESPVis:Toggle({ Title = "Head Dot", Value = Config.ESP.HeadDot, Callback = function(v) Config.ESP.HeadDot = v end }))
+    Reg("ESP.Names", ESPVis:Toggle({ Title = "Names", Value = Config.ESP.Names, Callback = function(v) Config.ESP.Names = v end }))
+    Reg("ESP.Distance", ESPVis:Toggle({ Title = "Distance", Value = Config.ESP.Distance, Callback = function(v) Config.ESP.Distance = v end }))
+    Reg("ESP.HealthBar", ESPVis:Toggle({ Title = "Health Bar", Value = Config.ESP.HealthBar, Callback = function(v) Config.ESP.HealthBar = v end }))
+    Reg("ESP.HealthDynamicColor", ESPVis:Toggle({ Title = "Dynamic Health Color", Value = Config.ESP.HealthDynamicColor, Callback = function(v) Config.ESP.HealthDynamicColor = v end }))
+
+    local ESPCol = ESPTab:Section({ Title = "Colors", Box = true, BoxBorder = true, Opened = false })
+    Reg("ESP.VisibleColor", ESPCol:Colorpicker({ Title = "Visible Color", Default = Config.ESP.VisibleColor, Callback = function(color) Config.ESP.VisibleColor = color end }))
+    Reg("ESP.HiddenColor", ESPCol:Colorpicker({ Title = "Hidden Color", Default = Config.ESP.HiddenColor, Callback = function(color) Config.ESP.HiddenColor = color end }))
+
+    local ESPStyle = ESPTab:Section({ Title = "Sizes", Box = true, BoxBorder = true, Opened = false })
+    Reg("ESP.BoxThickness", ESPStyle:Slider({ Title = "Box Thickness", Step = 0.1, Value = { Min = 0.5, Max = 4, Default = Config.ESP.BoxThickness }, Callback = function(v) Config.ESP.BoxThickness = v; ESP:RefreshStyles() end }))
+    Reg("ESP.CornerThickness", ESPStyle:Slider({ Title = "Corner Thickness", Step = 0.1, Value = { Min = 0.5, Max = 5, Default = Config.ESP.CornerThickness }, Callback = function(v) Config.ESP.CornerThickness = v; ESP:RefreshStyles() end }))
+    Reg("ESP.TracerThickness", ESPStyle:Slider({ Title = "Tracer Thickness", Step = 0.1, Value = { Min = 0.5, Max = 4, Default = Config.ESP.TracerThickness }, Callback = function(v) Config.ESP.TracerThickness = v; ESP:RefreshStyles() end }))
+    Reg("ESP.TracerTransparency", ESPStyle:Slider({ Title = "Tracer Transparency", Step = 0.05, Value = { Min = 0, Max = 1, Default = Config.ESP.TracerTransparency }, Callback = function(v) Config.ESP.TracerTransparency = v; ESP:RefreshStyles() end }))
+    Reg("ESP.NameSize", ESPStyle:Slider({ Title = "Name Size", Step = 1, Value = { Min = 8, Max = 24, Default = Config.ESP.NameSize }, Callback = function(v) Config.ESP.NameSize = v; ESP:RefreshStyles() end }))
+    Reg("ESP.DistSize", ESPStyle:Slider({ Title = "Distance Size", Step = 1, Value = { Min = 8, Max = 24, Default = Config.ESP.DistSize }, Callback = function(v) Config.ESP.DistSize = v; ESP:RefreshStyles() end }))
+    Reg("ESP.HealthBarWidth", ESPStyle:Slider({ Title = "Health Bar Width", Step = 0.2, Value = { Min = 1, Max = 6, Default = Config.ESP.HealthBarWidth }, Callback = function(v) Config.ESP.HealthBarWidth = v end }))
+
+    local ESPPerf = ESPTab:Section({ Title = "ESP Performance", Box = true, BoxBorder = true, Opened = false })
+    Reg("ESP.VisPerFrame", ESPPerf:Slider({ Title = "Wall Check Speed", Step = 1, Value = { Min = 1, Max = 6, Default = Config.ESP.VisPerFrame }, Callback = function(v) Config.ESP.VisPerFrame = v end }))
+    Reg("ESP.MobileFPS", ESPPerf:Slider({ Title = "ESP FPS", Step = 5, Value = { Min = 15, Max = 60, Default = Config.ESP.MobileFPS }, Callback = function(v) Config.ESP.MobileFPS = v end }))
+    Reg("ESP.MaxDrawPlayers", ESPPerf:Slider({ Title = "Max Players", Step = 1, Value = { Min = 1, Max = 30, Default = Config.ESP.MaxDrawPlayers }, Callback = function(v) Config.ESP.MaxDrawPlayers = v end }))
+    Reg("ESP.MaxDistance", ESPPerf:Slider({ Title = "Max Distance", Step = 100, Value = { Min = 500, Max = 5000, Default = Config.ESP.MaxDistance }, Callback = function(v) Config.ESP.MaxDistance = v end }))
+
+    -- Movement
+    local MoveTab = Window:Tab({ Title = "Movement", Icon = "zap" })
+    local NoClipSec = MoveTab:Section({ Title = "NoClip", Box = true, BoxBorder = true, Opened = true })
+    Reg("Movement.NoClip.Enabled", NoClipSec:Toggle({
+        Title = "Enable NoClip",
+        Desc = "يمر من الجدران — قد لا يعمل إذا السيرفر يتحكم بالتصادم",
+        Value = Config.Movement.NoClip.Enabled == true,
+        Callback = function(v) Config.Movement.NoClip.Enabled = v; Movement:Refresh() end
+    }))
+
+    local AirSec = MoveTab:Section({ Title = "AirJump PRO", Box = true, BoxBorder = true, Opened = true })
+    Reg("Movement.AirJump.Enabled", AirSec:Toggle({
+        Title = "Enable AirJump",
+        Value = Config.Movement.AirJump.Enabled == true,
+        Callback = function(v) Config.Movement.AirJump.Enabled = v; Movement:Refresh() end
+    }))
+    Reg("Movement.AirJump.Unlimited", AirSec:Toggle({
+        Title = "Unlimited AirJump",
+        Value = Config.Movement.AirJump.Unlimited == true,
+        Callback = function(v) Config.Movement.AirJump.Unlimited = v; Movement:Refresh() end
+    }))
+    Reg("Movement.AirJump.Jumps", AirSec:Slider({
+        Title = "Jumps Count",
+        Step = 1,
+        Value = { Min = 2, Max = 50, Default = Config.Movement.AirJump.Jumps },
+        Callback = function(v) Config.Movement.AirJump.Jumps = v; Movement:Refresh() end
+    }))
+    Reg("Movement.AirJump.Power", AirSec:Slider({
+        Title = "AirJump Power",
+        Step = 5,
+        Value = { Min = 5, Max = 500, Default = Config.Movement.AirJump.Power },
+        Callback = function(v) Config.Movement.AirJump.Power = v; Movement:Refresh() end
+    }))
+    Reg("Movement.AirJump.MaxVelocity", AirSec:Slider({
+        Title = "AirJump Max Velocity",
+        Step = 10,
+        Value = { Min = 10, Max = 2000, Default = Config.Movement.AirJump.MaxVelocity },
+        Callback = function(v) Config.Movement.AirJump.MaxVelocity = v; Movement:Refresh() end
+    }))
+    Reg("Movement.AirJump.Mode", AirSec:Dropdown({
+        Title = "AirJump Mode",
+        Values = { "Add", "Set" },
+        Value = Config.Movement.AirJump.Mode,
+        Callback = function(v) Config.Movement.AirJump.Mode = v; Movement:Refresh() end
+    }))
+
+    local SpeedSec = MoveTab:Section({ Title = "Speed PRO", Box = true, BoxBorder = true, Opened = true })
+    Reg("Movement.Speed.Enabled", SpeedSec:Toggle({
+        Title = "Enable Speed",
+        Value = Config.Movement.Speed.Enabled == true,
+        Callback = function(v) Config.Movement.Speed.Enabled = v; Movement:Refresh() end
+    }))
+    Reg("Movement.Speed.Speed", SpeedSec:Slider({
+        Title = "Walk Speed",
+        Step = 1,
+        Value = { Min = 16, Max = 500, Default = Config.Movement.Speed.Speed },
+        Callback = function(v) Config.Movement.Speed.Speed = v; Movement:Refresh() end
+    }))
+    Reg("Movement.Speed.VelocityFallback", SpeedSec:Toggle({
+        Title = "Velocity Fallback",
+        Desc = "يفرض السرعة عبر Velocity إذا اللعبة تمنع WalkSpeed",
+        Value = Config.Movement.Speed.VelocityFallback == true,
+        Callback = function(v) Config.Movement.Speed.VelocityFallback = v; Movement:Refresh() end
+    }))
+    Reg("Movement.Speed.VelocityStrength", SpeedSec:Slider({
+        Title = "Velocity Strength",
+        Step = 0.05,
+        Value = { Min = 0.1, Max = 1, Default = Config.Movement.Speed.VelocityStrength },
+        Callback = function(v) Config.Movement.Speed.VelocityStrength = v; Movement:Refresh() end
+    }))
+
+    local JumpSec = MoveTab:Section({ Title = "HighJump PRO", Box = true, BoxBorder = true, Opened = true })
+    Reg("Movement.HighJump.Enabled", JumpSec:Toggle({
+        Title = "Enable HighJump",
+        Value = Config.Movement.HighJump.Enabled == true,
+        Callback = function(v) Config.Movement.HighJump.Enabled = v; Movement:Refresh() end
+    }))
+    Reg("Movement.HighJump.JumpPower", JumpSec:Slider({
+        Title = "Jump Power",
+        Step = 5,
+        Value = { Min = 50, Max = 500, Default = Config.Movement.HighJump.JumpPower },
+        Callback = function(v) Config.Movement.HighJump.JumpPower = v; Movement:Refresh() end
+    }))
+    Reg("Movement.HighJump.VelocityBoost", JumpSec:Toggle({
+        Title = "HighJump Velocity Boost",
+        Desc = "يدعم القفزة بقوة Velocity مباشرة",
+        Value = Config.Movement.HighJump.VelocityBoost == true,
+        Callback = function(v) Config.Movement.HighJump.VelocityBoost = v; Movement:Refresh() end
+    }))
+
+    -- Performance
+    local PerfTab = Window:Tab({ Title = "Performance", Icon = "gauge" })
+    local FPSsec = PerfTab:Section({ Title = "FPS Control", Box = true, BoxBorder = true, Opened = true })
+    Reg("Performance.ShowFPS", FPSsec:Toggle({
+        Title = "Show FPS Counter",
+        Desc = "عداد FPS حي على الشاشة",
+        Value = Config.Performance.ShowFPS,
+        Callback = function(v) Config.Performance.ShowFPS = v end
+    }))
+    Reg("Performance.FPSCap", FPSsec:Slider({
+        Title = "FPS Cap",
+        Desc = "يقفل الإطارات = بطارية أطول",
+        Step = 5,
+        Value = { Min = 20, Max = 144, Default = Config.Performance.FPSCap },
+        Callback = function(v) Config.Performance.FPSCap = v; SetFPS(v) end
+    }))
+    FPSsec:Button({
+        Title = "Unlimited FPS",
+        Icon = "zap",
+        Callback = function() Config.Performance.FPSCap = 9999; SetFPS(9999) end
+    })
+    FPSsec:Button({
+        Title = "Battery Saver",
+        Icon = "battery",
+        Color = Color3.fromRGB(255, 210, 90),
+        Callback = function()
+            Config.Performance.FPSCap = 30
+            SetFPS(30)
+            ApplyQuality("Low")
+        end
+    })
+    Reg("Performance.AdaptiveQuality", FPSsec:Toggle({
+        Title = "Adaptive Quality",
+        Desc = "يخفض الجودة تلقائيًا إذا نزل FPS",
+        Value = Config.Performance.AdaptiveQuality,
+        Callback = function(v) Config.Performance.AdaptiveQuality = v end
+    }))
+
+    local FPSCustom = PerfTab:Section({ Title = "FPS Counter Style", Box = true, BoxBorder = true, Opened = false })
+    Reg("Performance.FPSCounter.Size", FPSCustom:Slider({ Title = "Size", Step = 1, Value = { Min = 10, Max = 32, Default = Config.Performance.FPSCounter.Size }, Callback = function(v) Config.Performance.FPSCounter.Size = v; UpdateFPSDraw() end }))
+    Reg("Performance.FPSCounter.X", FPSCustom:Slider({ Title = "Position X", Step = 1, Value = { Min = 0, Max = 2000, Default = Config.Performance.FPSCounter.X }, Callback = function(v) Config.Performance.FPSCounter.X = v; UpdateFPSDraw() end }))
+    Reg("Performance.FPSCounter.Y", FPSCustom:Slider({ Title = "Position Y", Step = 1, Value = { Min = 0, Max = 2000, Default = Config.Performance.FPSCounter.Y }, Callback = function(v) Config.Performance.FPSCounter.Y = v; UpdateFPSDraw() end }))
+    Reg("Performance.FPSCounter.Outline", FPSCustom:Toggle({ Title = "Outline", Value = Config.Performance.FPSCounter.Outline, Callback = function(v) Config.Performance.FPSCounter.Outline = v; UpdateFPSDraw() end }))
+    Reg("Performance.FPSCounter.AutoColor", FPSCustom:Toggle({
+        Title = "Auto Color",
+        Desc = "أخضر = عالي | أصفر = متوسط | أحمر = منخفض",
+        Value = Config.Performance.FPSCounter.AutoColor,
+        Callback = function(v) Config.Performance.FPSCounter.AutoColor = v end
+    }))
+    Reg("Performance.FPSCounter.Color", FPSCustom:Colorpicker({ Title = "Custom Color", Default = Config.Performance.FPSCounter.Color, Callback = function(color) Config.Performance.FPSCounter.Color = color end }))
+
+    local QualSec = PerfTab:Section({ Title = "Graphics Quality", Box = true, BoxBorder = true, Opened = true })
+    QualSec:Dropdown({
+        Title = "Quality Preset",
+        Values = { "Ultra", "High", "Medium", "Low", "Potato" },
+        Value = "Medium",
+        Callback = function(v) ApplyQuality(v) end
+    })
+    QualSec:Button({
+        Title = "Auto (Recommended)",
+        Icon = "sparkles",
+        Color = Color3.fromRGB(94, 255, 170),
+        Desc = "Medium + قفل 60 = توازن للجوال",
+        Callback = function()
+            Config.Performance.FPSCap = 60
+            SetFPS(60)
+            ApplyQuality("Medium")
+        end
+    })
+    Reg("Performance.PostFXOff", QualSec:Toggle({ Title = "Disable Post-FX", Desc = "يطفئ Bloom/Blur (يرفع الأداء)", Value = Config.Performance.PostFXOff, Callback = function(v) Config.Performance.PostFXOff = v; SetPostFX(v) end }))
+    Reg("Performance.EffectsOff", QualSec:Toggle({ Title = "Disable Particles", Desc = "يطفئ Particles/Beams/Trails", Value = Config.Performance.EffectsOff, Callback = function(v) Config.Performance.EffectsOff = v; SetEffects(v) end }))
+    Reg("Performance.RemoveLights", QualSec:Toggle({ Title = "Remove Extra Lights", Desc = "يطفئ الإضاءات الزائدة", Value = Config.Performance.RemoveLights, Callback = function(v) Config.Performance.RemoveLights = v; SetLights(v) end }))
+    Reg("Performance.LowDetail", QualSec:Toggle({ Title = "Low Detail", Desc = "يخفي Textures/Decals لرفع الأداء", Value = Config.Performance.LowDetail, Callback = function(v) Config.Performance.LowDetail = v; SetLowDetail(v) end }))
+    Reg("Performance.LowWater", QualSec:Toggle({ Title = "Low Water Quality", Desc = "يخفف موجات وانعكاس الماء", Value = Config.Performance.LowWater, Callback = function(v) Config.Performance.LowWater = v; SetLowWater(v) end }))
+
+    local LightSec = PerfTab:Section({ Title = "Lighting & World", Box = true, BoxBorder = true, Opened = false })
+    Reg("Performance.Shadows", LightSec:Toggle({ Title = "Shadows", Value = Config.Performance.Shadows, Callback = function(v) SetShadows(v) end }))
+    Reg("Performance.FogDistance", LightSec:Slider({
+        Title = "Fog Distance",
+        Desc = "أقل = أداء أعلى",
+        Step = 100,
+        Value = { Min = 100, Max = 100000, Default = Config.Performance.FogDistance },
+        Callback = function(v) SetFog(v) end
+    }))
+    Reg("Performance.Brightness", LightSec:Slider({
+        Title = "Brightness",
+        Step = 0.1,
+        Value = { Min = 0, Max = 3, Default = Config.Performance.Brightness },
+        Callback = function(v) SetBright(v) end
+    }))
+
+    local ResetSec = PerfTab:Section({ Title = "Reset", Box = true, BoxBorder = true, Opened = true })
+    ResetSec:Button({
+        Title = "Restore Original",
+        Icon = "rotate-ccw",
+        Color = Color3.fromRGB(255, 180, 80),
+        Desc = "يرجّع إعدادات اللعبة لأصلها",
+        Callback = function()
+            RestoreAll()
+            safeCall(function() RefreshUI() end)
+        end
+    })
+
+    -- Protection
+    local ProtTab = Window:Tab({ Title = "Protection", Icon = "shield" })
+    local ProtSec = ProtTab:Section({ Title = "Protection", Box = true, BoxBorder = true, Opened = true })
+    Reg("Protection.AntiKickBan", ProtSec:Toggle({
+        Title = "Anti Kick / Ban",
+        Desc = "يمنع الريموتات المشبوهة (ما يمنع زر الخروج)",
+        Value = Config.Protection.AntiKickBan,
+        Callback = function(v) Config.Protection.AntiKickBan = v end
+    }))
+    Reg("Protection.AntiAFK", ProtSec:Toggle({
+        Title = "Anti-AFK",
+        Desc = "يمنع طردك بسبب الخمول",
+        Value = Config.Protection.AntiAFK,
+        Callback = function(v) Config.Protection.AntiAFK = v end
+    }))
+    Reg("Protection.ExecutorCloak", ProtSec:Toggle({
+        Title = "Executor Cloak",
+        Desc = "يخفي اسم المحرك",
+        Value = Config.Protection.ExecutorCloak,
+        Callback = function(v) Config.Protection.ExecutorCloak = v end
+    }))
+    Reg("Protection.AutoDeleteReports", ProtSec:Toggle({
+        Title = "Auto Delete Reports",
+        Desc = "يحذف بلاغات اللعبة (PlayerGui فقط — ما يكسر القائمة)",
+        Value = Config.Protection.AutoDeleteReports,
+        Callback = function(v)
+            Config.Protection.AutoDeleteReports = v
+            if v then safeCall(function() EnsureReportProtection() end) end
+        end
+    }))
+
+    -- Settings
+    local SetTab = Window:Tab({ Title = "Settings", Icon = "settings" })
+    local ConfigSec = SetTab:Section({ Title = "Config Manager", Box = true, BoxBorder = true, Opened = true })
+    Reg("Settings.AutoSave", ConfigSec:Toggle({
+        Title = "Auto Save",
+        Desc = "يحفظ تلقائي عند إغلاق السكربت",
+        Value = Config.Settings.AutoSave,
+        Callback = function(v) Config.Settings.AutoSave = v end
+    }))
+    ConfigSec:Button({
+        Title = "Save Settings",
+        Icon = "save",
+        Color = Color3.fromRGB(94, 255, 170),
+        Callback = function()
+            local ok = SaveConfig()
+            safeCall(function()
+                WindUI:Notify({
+                    Title = "Delta Hub",
+                    Content = ok and "تم حفظ الإعدادات ✅" or "فشل الحفظ ❌",
+                    Icon = ok and "check" or "x",
+                    Duration = 3,
+                })
+            end)
+        end
+    })
+    ConfigSec:Button({
+        Title = "Load Settings",
+        Icon = "folder-open",
+        Callback = function()
+            local ok = LoadConfig()
+            if ok then
+                ApplyPerformanceSettings()
+                Movement:Refresh()
+                ESP:RefreshStyles()
+                safeCall(function() RefreshUI() end)
+                pcall(function() Window:SetToggleKey(Config.Settings.ToggleKey) end)
+            end
+            safeCall(function()
+                WindUI:Notify({
+                    Title = "Delta Hub",
+                    Content = ok and "تم تحميل الإعدادات ✅" or "ما في ملف محفوظ ❌",
+                    Icon = ok and "check" or "x",
+                    Duration = 3,
+                })
+            end)
+        end
+    })
+    ConfigSec:Button({
+        Title = "Reset to Default",
+        Icon = "rotate-ccw",
+        Color = Color3.fromRGB(255, 180, 80),
+        Callback = function()
+            ResetConfig()
+            ApplyPerformanceSettings()
+            Movement:Refresh()
+            ESP:RefreshStyles()
+            safeCall(function() RefreshUI() end)
+            pcall(function() Window:SetToggleKey(Config.Settings.ToggleKey) end)
+            safeCall(function()
+                WindUI:Notify({
+                    Title = "Delta Hub",
+                    Content = "تم إعادة الإعدادات للافتراضي ✅",
+                    Icon = "check",
+                    Duration = 3,
+                })
+            end)
+        end
+    })
+
+    local MenuSec = SetTab:Section({ Title = "Menu", Box = true, BoxBorder = true, Opened = true })
+    MenuSec:Keybind({
+        Title = "Toggle Menu Key",
+        Value = "RightShift",
+        Callback = function(keyName)
+            local key = GetKeyCode(keyName)
+            if key then pcall(function() Window:SetToggleKey(key) end) end
+        end
+    })
+    MenuSec:Button({
+        Title = "Close Menu",
+        Icon = "x",
+        Callback = function() pcall(function() Window:Close() end) end
+    })
+    MenuSec:Button({
+        Title = "Destroy Script",
+        Icon = "trash",
+        Color = Color3.fromRGB(255, 80, 80),
+        Callback = function()
+            if Config.Settings.AutoSave then SaveConfig() end
+            safeCall(function() RunService:UnbindFromRenderStep("DeltaESP") end)
+            safeCall(function() RunService:UnbindFromRenderStep("DeltaAimbot") end)
+            safeCall(function() RunService:UnbindFromRenderStep("DeltaPerf") end)
+            safeCall(function() RunService:UnbindFromRenderStep("DeltaPerfStyle") end)
+            safeCall(function() RunService:UnbindFromRenderStep("DeltaMovement") end)
+            safeCall(function()
+                if type(getgenv) == "function" then
+                    local env = getgenv()
+                    if env then
+                        if env.DeltaMovementDestroy then env.DeltaMovementDestroy() end
+                        if env.DeltaProtectionCleanup then env.DeltaProtectionCleanup() end
+                        if env.DeltaAimbotConnections then
+                            for _, c in ipairs(env.DeltaAimbotConnections) do
+                                pcall(function() c:Disconnect() end)
+                            end
+                        end
+                    end
+                end
+            end)
+            safeCall(function()
+                for plr in pairs(ESP.Objects) do ESP:Remove(plr) end
+            end)
+            safeCall(function() RestoreAll() end)
+            safeCall(function()
+                if Perf and Perf.Destroy then Perf.Destroy() end
+            end)
+            safeCall(function() Window:Destroy() end)
+        end
+    })
+
+    AimTab:Select()
+
+    safeCall(function()
+        WindUI:Notify({
+            Title = "Delta Hub",
+            Content = "ABSOLUTE FINAL (ALL FIXES) جاهز ⚡",
+            Icon = "check",
+            Duration = 5,
+        })
+    end)
+end)
